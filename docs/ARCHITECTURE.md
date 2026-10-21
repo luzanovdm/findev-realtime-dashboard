@@ -142,6 +142,12 @@ Dependency rules:
 - Market-specific rules, worker scheduling, and metric accumulation remain in their owning feature.
   `core` contains neither generic feature facades nor type-based `models` or `services` buckets.
 
+`npm run lint` enforces these import boundaries for `core`, dashboard, settings, and worker-side
+producer code. It also checks Angular TypeScript and templates and limits production TypeScript to
+300 nonblank, noncomment lines per file, 80 per function, cyclomatic complexity 15, nesting depth
+4, and five parameters. `npm run check` and the staged-file hook include the lint. A limit breach
+must lead to a responsibility split or a simpler flow rather than a file-level exception.
+
 ## 4. Runtime ownership
 
 | Owner                   | State and responsibility                                      | Lifetime                             |

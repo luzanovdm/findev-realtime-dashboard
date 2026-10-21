@@ -24,18 +24,19 @@ import {
 } from 'rxjs';
 import type { Observable, SchedulerLike, Subscription } from 'rxjs';
 import { match } from 'ts-pattern';
-import { isPositiveSafeInteger } from '../../../core/validation/integer-range';
 import { createActiveState, pauseState, reduceBatch, resumeState } from './active-run-state';
 import type { ActiveState, RunClock } from './active-run-state';
+import {
+  controlModesForRun,
+  decodeCommand,
+  INITIAL_ROUTE_STATE,
+  routeCommand,
+} from './command-routing';
+import type { CommandInput, RouteState, RouteTransition, RunMode } from './command-routing';
 import { producerErrorCode, ProducerFault } from '../producer-error';
 import { ProducerErrorCode } from '../market-producer.types';
 import type { GeneratorPort } from './wasm-generator';
-import { isProducerWorkerCommand } from './worker.protocol';
-import type {
-  ProducerWorkerCommand,
-  ProducerWorkerEvent,
-  StartRunCommand,
-} from './worker.protocol';
+import type { ProducerWorkerEvent, StartRunCommand } from './worker.protocol';
 
 export interface ProducerDiagnostic {
   readonly code: ReturnType<typeof producerErrorCode>;
@@ -51,29 +52,6 @@ export interface ControllerDependencies extends RunClock {
   scheduler?: SchedulerLike;
 }
 
-type CommandInput =
-  | { readonly kind: 'valid'; readonly command: ProducerWorkerCommand }
-  | { readonly kind: 'malformed'; readonly runId: number | null };
-
-type RouteTransition =
-  | { readonly kind: 'start'; readonly command: StartRunCommand }
-  | { readonly kind: 'protocol-error'; readonly runId: number }
-  | { readonly kind: 'dispose' };
-
-interface RouteState {
-  readonly currentRunId: number;
-  readonly protocolFailedRunId: number | null;
-  readonly disposed: boolean;
-  readonly transition: RouteTransition | null;
-}
-
-type RunMode = 'running' | 'paused';
-type ControlCommand = Extract<ProducerWorkerCommand, { type: 'pause' | 'resume' }>;
-
-const MODE_FOR_CONTROL = { pause: 'paused', resume: 'running' } as const satisfies Readonly<
-  Record<ControlCommand['type'], RunMode>
->;
-
 interface ModeInput {
   readonly mode: RunMode;
   readonly initial: boolean;
@@ -84,13 +62,6 @@ interface EmissionState {
   readonly failedRunId: number | null;
   readonly event: ProducerWorkerEvent | null;
 }
-
-const INITIAL_ROUTE_STATE: RouteState = {
-  currentRunId: 0,
-  protocolFailedRunId: null,
-  disposed: false,
-  transition: null,
-};
 
 const INITIAL_EMISSION_STATE: EmissionState = { failedRunId: null, event: null };
 
@@ -222,6 +193,11 @@ export class ProducerController {
     commands: Observable<CommandInput>,
   ): Observable<ProducerWorkerEvent> {
     const intervalMs = command.settings.batchIntervalMs;
+    const batchContext = {
+      runId: command.runId,
+      batchSize: command.settings.updatesPerBatch,
+      intervalMs,
+    };
     const scheduler = this.dependencies.scheduler ?? asyncScheduler;
     const modes = controlModesForRun(commands, command.runId).pipe(
       startWith('running' as const),
@@ -233,14 +209,7 @@ export class ProducerController {
       map(
         (updates): ActiveChange =>
           (state) =>
-            reduceBatch(
-              state,
-              updates,
-              command.runId,
-              command.settings.updatesPerBatch,
-              intervalMs,
-              this.dependencies,
-            ),
+            reduceBatch(state, updates, batchContext, this.dependencies),
       ),
     );
     const modeStreams = {
@@ -284,67 +253,6 @@ export class ProducerController {
       // Diagnostics must never replace the typed failure event.
     }
   }
-}
-
-function decodeCommand(value: unknown): CommandInput {
-  if (isProducerWorkerCommand(value)) return { kind: 'valid', command: value };
-  if (typeof value !== 'object' || value === null || !('runId' in value)) {
-    return { kind: 'malformed', runId: null };
-  }
-  const runId = value.runId;
-  return {
-    kind: 'malformed',
-    runId: isPositiveSafeInteger(runId) ? runId : null,
-  };
-}
-
-function controlModesForRun(
-  commands: Observable<CommandInput>,
-  runId: number,
-): Observable<RunMode> {
-  return commands.pipe(
-    filter((input): input is Extract<CommandInput, { kind: 'valid' }> => input.kind === 'valid'),
-    map((input) => input.command),
-    filter((command): command is ControlCommand => isRunControl(command, runId)),
-    map((command) => MODE_FOR_CONTROL[command.type]),
-  );
-}
-
-function isRunControl(command: ProducerWorkerCommand, runId: number): command is ControlCommand {
-  return command.runId === runId && Object.hasOwn(MODE_FOR_CONTROL, command.type);
-}
-
-function routeCommand(state: RouteState, input: CommandInput): RouteState {
-  if (state.disposed) return { ...state, transition: null };
-  if (input.kind === 'malformed') {
-    if (
-      input.runId === null ||
-      input.runId < state.currentRunId ||
-      input.runId === state.protocolFailedRunId
-    ) {
-      return { ...state, transition: null };
-    }
-    return {
-      currentRunId: input.runId,
-      protocolFailedRunId: input.runId,
-      disposed: false,
-      transition: { kind: 'protocol-error', runId: input.runId },
-    };
-  }
-
-  const command = input.command;
-  if (command.type === 'start-run' && command.runId > state.currentRunId) {
-    return {
-      currentRunId: command.runId,
-      protocolFailedRunId: null,
-      disposed: false,
-      transition: { kind: 'start', command },
-    };
-  }
-  if (command.type === 'dispose' && command.runId === state.currentRunId) {
-    return { ...state, disposed: true, transition: { kind: 'dispose' } };
-  }
-  return { ...state, transition: null };
 }
 
 function deduplicateRunError(state: EmissionState, event: ProducerWorkerEvent): EmissionState {

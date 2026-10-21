@@ -14,6 +14,12 @@ export interface RunClock {
   timestampMs(): number;
 }
 
+export interface BatchContext {
+  readonly runId: number;
+  readonly batchSize: number;
+  readonly intervalMs: number;
+}
+
 interface PaceState {
   readonly lastBatchAt: number | null;
   readonly lateIntervals: number;
@@ -74,22 +80,20 @@ export function pauseState(state: ActiveState, runId: number, clock: RunClock): 
 export function reduceBatch(
   state: ActiveState,
   updates: readonly MarketUpdate[],
-  runId: number,
-  batchSize: number,
-  intervalMs: number,
+  context: BatchContext,
   clock: RunClock,
 ): ActiveState {
-  if (updates.length !== batchSize) throw new ProducerFault(ProducerErrorCode.Protocol);
+  if (updates.length !== context.batchSize) throw new ProducerFault(ProducerErrorCode.Protocol);
   const metrics = accumulateMetricBatch(state.metrics, updates);
   const sequence = state.sequence + 1;
   const now = clock.now();
-  const pace = measurePace(state.pace, now, intervalMs);
+  const pace = measurePace(state.pace, now, context.intervalMs);
   const publish = state.lastPublishedAt === null || now - state.lastPublishedAt >= 100;
   const next = { ...state, metrics, pace, sequence };
   const events: ProducerWorkerEvent[] = [];
-  if (publish) events.push(makeSnapshot(next, runId, clock));
+  if (publish) events.push(makeSnapshot(next, context.runId, clock));
   if (pace.slow !== state.pace.slow) {
-    events.push({ type: 'pace-changed', runId, slow: pace.slow });
+    events.push({ type: 'pace-changed', runId: context.runId, slow: pace.slow });
   }
   return {
     ...next,

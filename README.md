@@ -51,10 +51,11 @@ not rebuild AssemblyScript automatically.
 | `npm test`             | Run unit tests, then compiled Wasm and worker tests                  |
 | `npm run format`       | Format the project with Prettier                                     |
 | `npm run format:check` | Check project formatting                                             |
+| `npm run lint`         | Check Angular, templates, and architectural constraints              |
 | `npm run typecheck`    | Type-check app, worker, and tests with strict TypeScript             |
 | `npm run commit`       | Create a guided Conventional Commit                                  |
 | `npm run audit`        | Check dependencies for high-severity vulnerabilities                 |
-| `npm run check`        | Check formatting, types, and all available tests                     |
+| `npm run check`        | Check formatting, lint, types, and all available tests               |
 | `npm run perf:soak`    | Build and run a five-minute maximum-rate worker/accounting soak      |
 | `npm run clean`        | Remove generated `dist`, `.angular/cache`, and `public/wasm` files   |
 
@@ -78,7 +79,8 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 feat(dashboard): add cumulative volume metrics
 ```
 
-The pre-commit hook formats staged files with Prettier, the commit-msg hook validates the message,
+The pre-commit hook formats staged files with Prettier and lints staged TypeScript/templates;
+the commit-msg hook validates the message,
 and the pre-push hook runs the complete project check. The GitHub Actions quality workflow currently
 runs only when manually dispatched. Automatic triggers will return before submission, excluding
 documentation-only changes. Dependabot checks npm and GitHub Actions updates weekly.
@@ -118,6 +120,8 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - Angular's global error handler exposes a fixed English recovery message for unexpected interface
   failures; the HTML shell has a fallback if application bootstrap fails before Angular renders.
 - EditorConfig, Prettier, and VS Code format-on-save settings with recommended extensions.
+- ESLint checks Angular source and templates, caps production files at 300 effective lines and
+  functions at 80, and enforces complexity, nesting, parameter, and feature-import boundaries.
 
 ## Producer flow
 

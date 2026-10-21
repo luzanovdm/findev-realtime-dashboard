@@ -14,7 +14,7 @@ function fakeProducer() {
   const error = signal(null);
   const settingsSaveStatus = signal<'saved' | 'unavailable' | null>('saved');
   const outcomes = new Subject<'running' | 'error'>();
-  const apply = vi.fn((settings: typeof DEFAULT_PRODUCER_SETTINGS) => {
+  const apply = vi.fn(() => {
     runId.update((id) => id + 1);
     status.set('initializing');
     return true;

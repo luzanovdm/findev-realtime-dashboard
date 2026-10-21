@@ -5,7 +5,7 @@
 | Status               | Runtime and local acceptance verified; deployment pending                                                          |
 | Owner                | Repository maintainer                                                                                              |
 | Version              | 1.0                                                                                                                |
-| Last reviewed        | 2026-10-21                                                                                                         |
+| Last reviewed        | 2026-10-22                                                                                                         |
 | Upstream requirement | [TASK.md](../TASK.md)                                                                                              |
 | Related decision     | [ADR-0001: Use AssemblyScript for the market generator](decisions/0001-use-assemblyscript-for-market-generator.md) |
 | Downstream plan      | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)                                                                   |
@@ -71,6 +71,8 @@ src/app/
   app-error.ts                 application-wide unexpected-error fallback
   app.routes.ts                route composition
   core/
+    appearance/
+      appearance.service.ts   system/light/dark preference through Taiga UI
     money/
       financial-decimal.ts     exact Decimal construction and worker serialization
       format-usd-cents.ts      en-US Intl USD display without changing stored precision
@@ -118,7 +120,9 @@ assembly/
 `generation` owns the asynchronous worker/Wasm boundary; `metrics` owns cumulative market
 calculation; `instrument-table` owns the table component, its styling, and metric presentation.
 They are product sub-capabilities. Public contracts and the facade remain at the market-producer
-feature root. `core/money` owns the exact Decimal policy and reusable USD presentation, while
+feature root. `core/appearance` owns the application-wide theme preference and delegates system
+media-query tracking and explicit-choice persistence to Taiga UI. `core/money` owns the exact Decimal
+policy and reusable USD presentation, while
 `core/numbers` owns reusable count formatting. The market-specific imbalance formatter stays in
 `instrument-table`. All three presentation functions use `Intl.NumberFormat` with explicit `en-US`
 formatters. Decimal values remain exact strings at the Intl boundary and are never converted to
@@ -155,6 +159,13 @@ and event matching, a typed status-transition table, and explicit snapshot accep
 components never construct a worker. Destroying and recreating either route therefore preserves the
 active run and cannot multiply producers. Application teardown terminates the worker and removes
 listeners.
+
+Both pages use `loadComponent`; their component-provided `DashboardService` and
+`SettingsFormService` instances are created only after their routes load. The producer facade remains
+application-scoped to preserve one run across navigation. Angular `resource` is not used because
+settings storage is synchronous, Apply is a mutation, and market updates form an unbounded Worker
+stream modeled with RxJS and signals. No finite asynchronous read needs resource loading state or
+cancellation in this assignment.
 
 ## 5. Run and producer state model
 

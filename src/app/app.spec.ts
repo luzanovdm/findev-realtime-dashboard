@@ -3,6 +3,7 @@ import { provideTaiga } from '@taiga-ui/core';
 import { App } from './app';
 import { MarketProducerFacade } from './features/market-producer/market-producer.facade';
 import { describeProducerError } from './features/market-producer/producer-error';
+import { ProducerErrorCode } from './features/market-producer/market-producer.types';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -51,7 +52,7 @@ describe('Application shell', () => {
       imports: [App],
       providers: [
         provideRouter(routes),
-        provideTaiga({ mode: 'light' }),
+        provideTaiga(),
         { provide: MarketProducerFacade, useValue: producer },
       ],
     }).compileComponents();
@@ -60,6 +61,11 @@ describe('Application shell', () => {
     await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('tui-root')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('nav a')).toHaveLength(2);
+    const themeInputs: NodeListOf<HTMLInputElement> = fixture.nativeElement.querySelectorAll(
+      'input[name="color-theme"]',
+    );
+    expect(themeInputs).toHaveLength(3);
+    expect(themeInputs[0]?.checked).toBe(true);
     expect(producer.start).toHaveBeenCalledTimes(1);
   });
 
@@ -68,7 +74,7 @@ describe('Application shell', () => {
       start: vi.fn(),
       retry: vi.fn(),
       status: signal('error'),
-      error: signal(describeProducerError('wasm-fetch')),
+      error: signal(describeProducerError(ProducerErrorCode.WasmFetch)),
       stale: signal(false),
       snapshotAt: signal<number | null>(null),
     };
@@ -76,7 +82,7 @@ describe('Application shell', () => {
       imports: [App],
       providers: [
         provideRouter(routes),
-        provideTaiga({ mode: 'light' }),
+        provideTaiga(),
         { provide: MarketProducerFacade, useValue: producer },
       ],
     }).compileComponents();
@@ -104,7 +110,7 @@ describe('Application shell', () => {
       imports: [App],
       providers: [
         provideRouter(routes),
-        provideTaiga({ mode: 'light' }),
+        provideTaiga(),
         { provide: MarketProducerFacade, useValue: producer },
       ],
     }).compileComponents();

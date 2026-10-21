@@ -31,6 +31,7 @@ import {
 } from '../metrics/metric-accumulator';
 import type { MetricState } from '../metrics/metric-accumulator';
 import { producerErrorCode, ProducerFault } from '../producer-error';
+import { ProducerErrorCode } from '../market-producer.types';
 import type { GeneratorPort } from './wasm-generator';
 import { isProducerWorkerCommand } from './worker.protocol';
 import type {
@@ -138,8 +139,8 @@ export class ProducerController {
       start: (command: StartRunCommand) => this.run(command, commands),
       protocolError: (runId: number) =>
         defer(() => {
-          this.reportFailure({ code: 'protocol', runId, stage: 'command' });
-          return of({ type: 'run-error', runId, code: 'protocol' } as const);
+          this.reportFailure({ code: ProducerErrorCode.Protocol, runId, stage: 'command' });
+          return of({ type: 'run-error', runId, code: ProducerErrorCode.Protocol } as const);
         }),
     } satisfies TransitionStreams;
     this.subscription = commands
@@ -165,7 +166,7 @@ export class ProducerController {
             dependencies.emit(event);
           } catch (cause: unknown) {
             this.reportFailure({
-              code: 'generation',
+              code: ProducerErrorCode.Generation,
               runId: event.runId,
               stage: 'generation',
               cause,
@@ -176,9 +177,14 @@ export class ProducerController {
         error: (cause: unknown) => {
           const runId = this.currentRunId;
           if (runId > 0) {
-            this.reportFailure({ code: 'protocol', runId, stage: 'command', cause });
+            this.reportFailure({
+              code: ProducerErrorCode.Protocol,
+              runId,
+              stage: 'command',
+              cause,
+            });
             try {
-              dependencies.emit({ type: 'run-error', runId, code: 'protocol' });
+              dependencies.emit({ type: 'run-error', runId, code: ProducerErrorCode.Protocol });
             } catch {
               // A disconnected event channel cannot deliver the fallback either.
             }
@@ -208,7 +214,7 @@ export class ProducerController {
     const abortController = new AbortController();
     const invalidControl = controlModesForRun(commands, command.runId).pipe(
       map((): GeneratorPort => {
-        throw new ProducerFault('protocol');
+        throw new ProducerFault(ProducerErrorCode.Protocol);
       }),
     );
     return concat(
@@ -288,7 +294,9 @@ export class ProducerController {
       switchMap((input) => modeStreams[input.mode](input)),
       scan((state, change) => change(state), initial),
       mergeMap((state) => from(state.events)),
-      catchError((error: unknown) => of(this.failureEvent(command.runId, 'generation', error))),
+      catchError((error: unknown) =>
+        of(this.failureEvent(command.runId, ProducerErrorCode.Generation, error)),
+      ),
     );
   }
 
@@ -297,7 +305,7 @@ export class ProducerController {
     stage: 'initialization' | 'generation',
     cause: unknown,
   ): ProducerWorkerEvent {
-    const code = producerErrorCode(cause, 'generation');
+    const code = producerErrorCode(cause, ProducerErrorCode.Generation);
     this.reportFailure({ code, runId, stage, cause });
     return { type: 'run-error', runId, code };
   }
@@ -423,7 +431,7 @@ function reduceBatch(
   intervalMs: number,
   dependencies: ControllerDependencies,
 ): ActiveState {
-  if (updates.length !== batchSize) throw new ProducerFault('protocol');
+  if (updates.length !== batchSize) throw new ProducerFault(ProducerErrorCode.Protocol);
   const metrics = accumulateMetricBatch(state.metrics, updates);
   const sequence = state.sequence + 1;
   const now = dependencies.now();

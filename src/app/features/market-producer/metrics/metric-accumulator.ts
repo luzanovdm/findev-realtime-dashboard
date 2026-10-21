@@ -13,6 +13,7 @@ import type {
 } from '../market-producer.types';
 import { instrumentSymbol } from '../market-producer.types';
 import { ProducerFault } from '../producer-error';
+import { ProducerErrorCode } from '../market-producer.types';
 import { PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';
 
 interface InstrumentState {
@@ -54,14 +55,14 @@ export function accumulateMetricBatch(
   state: MetricState,
   updates: readonly MarketUpdate[],
 ): MetricState {
-  if (!Array.isArray(updates)) throw new ProducerFault('invalid-update');
+  if (!Array.isArray(updates)) throw new ProducerFault(ProducerErrorCode.InvalidUpdate);
 
   const instruments = [...state.instruments];
   try {
     for (const update of updates) {
       assertValidUpdate(update, state.instrumentCount);
       const current = instruments[update.instrumentIndex];
-      if (current === undefined) throw new ProducerFault('invalid-update');
+      if (current === undefined) throw new ProducerFault(ProducerErrorCode.InvalidUpdate);
       instruments[update.instrumentIndex] = {
         lastPriceCents: update.priceCents,
         bidCents: update.bidCents,
@@ -76,7 +77,7 @@ export function accumulateMetricBatch(
     }
   } catch (error: unknown) {
     if (error instanceof ProducerFault) throw error;
-    throw new ProducerFault('metric-failure', error);
+    throw new ProducerFault(ProducerErrorCode.MetricFailure, error);
   }
 
   return { ...state, instruments };
@@ -107,7 +108,7 @@ export function metricSnapshot(state: MetricState): readonly InstrumentMetricSna
       };
     });
   } catch (error: unknown) {
-    throw new ProducerFault('metric-failure', error);
+    throw new ProducerFault(ProducerErrorCode.MetricFailure, error);
   }
 }
 
@@ -126,7 +127,7 @@ export function serializedMetricSnapshot(
 
 function assertValidUpdate(value: unknown, instrumentCount: number): asserts value is MarketUpdate {
   if (!isRecord(value) || !hasValidFields(value) || !hasValidRelations(value, instrumentCount)) {
-    throw new ProducerFault('invalid-update', {
+    throw new ProducerFault(ProducerErrorCode.InvalidUpdate, {
       expected: `a valid update for one of ${instrumentCount} instruments`,
       observed: value,
     });

@@ -9,6 +9,6 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     { provide: ErrorHandler, useExisting: AppErrorHandler },
     provideRouter(routes),
-    provideTaiga({ mode: 'light' }),
+    provideTaiga(),
   ],
 };

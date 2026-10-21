@@ -2,7 +2,26 @@
   <div class="shell">
     <header class="header">
       <a class="brand" routerLink="/dashboard">Findev <span>Realtime dashboard</span></a>
-      <span tuiBadge appearance="neutral">{{ producer.status() }}</span>
+      <div class="header-controls">
+        <span tuiBadge appearance="neutral">{{ producer.status() }}</span>
+
+        <div class="theme-control" role="radiogroup" aria-label="Color theme">
+          <div class="theme-options">
+            @for (choice of appearance.choices; track choice.value) {
+              <label>
+                <input
+                  type="radio"
+                  name="color-theme"
+                  [value]="choice.value"
+                  [checked]="appearance.preference() === choice.value"
+                  (change)="appearance.select(choice.value)"
+                />
+                <span>{{ choice.label }}</span>
+              </label>
+            }
+          </div>
+        </div>
+      </div>
     </header>
     <nav class="navigation" aria-label="Main navigation">
       <a
@@ -38,7 +57,7 @@
         @if (producer.stale() && producer.snapshotAt(); as timestamp) {
           <p>Last confirmed values are outdated. Updated {{ timestamp | date: 'mediumTime' }}.</p>
         }
-        @if (error.recoveryAction !== 'none') {
+        @if (error.recoveryAction === recoveryAction.StartNewRun) {
           <button tuiButton type="button" size="s" (click)="producer.retry()">Start new run</button>
         }
       </div>

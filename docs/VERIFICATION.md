@@ -85,3 +85,12 @@ host. The GitHub repository remains private. Cloudflare Pages has no GitHub conn
 project for this repository yet. Remote route refreshes, Wasm response headers, a public demo, and
 automatic push-to-live deployment remain unverified. The local Pages emulator confirms packaging and
 routing rules only.
+
+The error-enum and appearance revision passed `npm run check`: formatting, strict application/worker/spec
+type checks, 177 Angular/Vitest tests, eight compiled-Wasm and production-worker tests, and a production
+build. The initial bundle is 505.48 kB raw (118.31 kB estimated transfer), below the 510 kB warning
+budget. The Dashboard and Settings code remain separate lazy chunks; the producer worker is also a
+separate chunk. In a local browser, the System/Light/Dark radio group changed the Taiga theme, a
+selected Dark preference survived reload, and arrow-key navigation selected Light. The preference
+was returned to System afterward. These observations do not repeat the older maximum-rate soak or
+remote-host checks.

@@ -61,7 +61,7 @@
       {{ form.settingsForm().submitting() ? 'Applying…' : 'Apply settings' }}
     </button>
     @if (form.visibleFeedback(); as feedback) {
-      <p class="form-feedback" [class.form-warning]="feedback.kind === 'unavailable'" role="status">
+      <p class="form-feedback" [class.form-warning]="feedback.warning" role="status">
         {{ feedback.message }}
       </p>
     }

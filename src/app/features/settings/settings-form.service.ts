@@ -2,7 +2,12 @@ import { computed, DestroyRef, inject, Injectable, linkedSignal, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { form, validate } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
-import { MarketProducerFacade } from '../market-producer/market-producer.facade';
+import {
+  MarketProducerFacade,
+  RunOutcome,
+  SettingsSaveStatus,
+} from '../market-producer/market-producer.facade';
+import { ProducerRecoveryAction } from '../market-producer/market-producer.types';
 import { PRODUCER_SETTING_NAMES } from '../market-producer/producer-settings';
 import {
   draftFieldError,
@@ -13,23 +18,21 @@ import {
 import type { SettingsDraft } from './settings-draft';
 
 const SAVE_FEEDBACK = {
-  saved: {
+  [SettingsSaveStatus.Saved]: {
     success: 'Saved in this browser. New run live.',
     failedRun: 'Your settings were saved in this browser.',
   },
-  unavailable: {
+  [SettingsSaveStatus.Unavailable]: {
     success: 'New run live. Browser storage is unavailable; settings will reset after reload.',
     failedRun: 'Browser storage is unavailable, so the settings will reset after a reload.',
   },
-} as const satisfies Readonly<
-  Record<'saved' | 'unavailable', { success: string; failedRun: string }>
->;
+} as const satisfies Readonly<Record<SettingsSaveStatus, { success: string; failedRun: string }>>;
 
 const APPLY_FAILURE_MESSAGE = {
-  error: 'The new run could not start. Review the producer error above.',
-  replaced: 'A newer run replaced this submission. Review the current settings.',
-  timeout: 'The new run did not respond in time. Try applying the settings again.',
-} as const satisfies Readonly<Record<'error' | 'replaced' | 'timeout', string>>;
+  [RunOutcome.Error]: 'The new run could not start. Review the producer error above.',
+  [RunOutcome.Replaced]: 'A newer run replaced this submission. Review the current settings.',
+  [RunOutcome.Timeout]: 'The new run did not respond in time. Try applying the settings again.',
+} as const satisfies Readonly<Record<Exclude<RunOutcome, RunOutcome.Running>, string>>;
 
 @Injectable()
 export class SettingsFormService {
@@ -66,7 +69,7 @@ export class SettingsFormService {
   private readonly feedback = signal<{
     readonly runId: number;
     readonly draft: SettingsDraft;
-    readonly kind: 'saved' | 'unavailable';
+    readonly warning: boolean;
     readonly message: string;
   } | null>(null);
   readonly visibleFeedback = computed(() => {
@@ -82,7 +85,7 @@ export class SettingsFormService {
     () =>
       this.settingsForm().submitting() ||
       this.producer.status() === 'initializing' ||
-      this.producer.error()?.recoveryAction === 'none',
+      this.producer.error()?.recoveryAction === ProducerRecoveryAction.None,
   );
 
   private async applySettings(): Promise<{ kind: 'apply-error'; message: string } | undefined> {
@@ -100,7 +103,7 @@ export class SettingsFormService {
     }
 
     const runId = this.producer.runId();
-    const saveStatus = this.producer.settingsSaveStatus() ?? 'unavailable';
+    const saveStatus = this.producer.settingsSaveStatus() ?? SettingsSaveStatus.Unavailable;
     const copy = SAVE_FEEDBACK[saveStatus];
 
     try {
@@ -108,7 +111,7 @@ export class SettingsFormService {
         this.producer.outcomeOf(runId).pipe(takeUntilDestroyed(this.destroyRef)),
       );
       if (this.destroyRef.destroyed) return;
-      if (outcome !== 'running') {
+      if (outcome !== RunOutcome.Running) {
         return {
           kind: 'apply-error',
           message: `${APPLY_FAILURE_MESSAGE[outcome]} ${copy.failedRun}`,
@@ -118,7 +121,7 @@ export class SettingsFormService {
       this.feedback.set({
         runId,
         draft: submittedDraft,
-        kind: saveStatus,
+        warning: saveStatus === SettingsSaveStatus.Unavailable,
         message: copy.success,
       });
       if (sameSettingsDraft(this.draft(), submittedDraft)) {

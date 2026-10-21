@@ -3,6 +3,7 @@ import {
   DEFAULT_PRODUCER_SETTINGS,
   isProducerSettings,
   PRODUCER_SETTING_CONSTRAINTS,
+  ProducerSettingIssueCode,
   validateProducerSettings,
 } from './producer-settings';
 import type { ProducerSettings } from './producer-settings';
@@ -33,16 +34,16 @@ describe('producer settings', () => {
   });
 
   it.each([
-    ['instrumentCount', 0, 'out-of-range'],
-    ['instrumentCount', 51, 'out-of-range'],
-    ['updatesPerBatch', 0, 'out-of-range'],
-    ['updatesPerBatch', 1_001, 'out-of-range'],
-    ['batchIntervalMs', 49, 'out-of-range'],
-    ['batchIntervalMs', 2_001, 'out-of-range'],
-    ['instrumentCount', 1.5, 'not-integer'],
-    ['updatesPerBatch', Number.NaN, 'not-finite'],
-    ['batchIntervalMs', Number.POSITIVE_INFINITY, 'not-finite'],
-    ['instrumentCount', '5', 'not-number'],
+    ['instrumentCount', 0, ProducerSettingIssueCode.OutOfRange],
+    ['instrumentCount', 51, ProducerSettingIssueCode.OutOfRange],
+    ['updatesPerBatch', 0, ProducerSettingIssueCode.OutOfRange],
+    ['updatesPerBatch', 1_001, ProducerSettingIssueCode.OutOfRange],
+    ['batchIntervalMs', 49, ProducerSettingIssueCode.OutOfRange],
+    ['batchIntervalMs', 2_001, ProducerSettingIssueCode.OutOfRange],
+    ['instrumentCount', 1.5, ProducerSettingIssueCode.NotInteger],
+    ['updatesPerBatch', Number.NaN, ProducerSettingIssueCode.NotFinite],
+    ['batchIntervalMs', Number.POSITIVE_INFINITY, ProducerSettingIssueCode.NotFinite],
+    ['instrumentCount', '5', ProducerSettingIssueCode.NotNumber],
   ] as const)('rejects %s=%s', (field, value, code) => {
     const settings: Record<string, unknown> = { ...DEFAULT_PRODUCER_SETTINGS, [field]: value };
 

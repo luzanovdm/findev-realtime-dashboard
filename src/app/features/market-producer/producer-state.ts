@@ -1,11 +1,13 @@
 import { match } from 'ts-pattern';
 import { fromNullableDecimalString } from '../../core/money/financial-decimal';
-import { instrumentSymbol } from './market-producer.types';
+import {
+  instrumentSymbol,
+  ProducerDataDisposition,
+  ProducerErrorCode,
+} from './market-producer.types';
 import type {
   InstrumentMetricSnapshot,
-  ProducerDataDisposition,
   ProducerError,
-  ProducerErrorCode,
   ProducerStatus,
 } from './market-producer.types';
 import { describeProducerError } from './producer-error';
@@ -112,12 +114,12 @@ const SNAPSHOT_RULES = Object.values({
 } satisfies Readonly<Record<string, SnapshotRule>>);
 
 const FAILURE_DATA = {
-  hide: (state: ProducerState) => ({
+  [ProducerDataDisposition.Hide]: (state: ProducerState) => ({
     metrics: emptyMetrics(state.pendingSettings.instrumentCount),
     snapshotAt: null,
     stale: false,
   }),
-  stale: (state: ProducerState) => ({
+  [ProducerDataDisposition.Stale]: (state: ProducerState) => ({
     metrics: state.metrics,
     snapshotAt: state.snapshotAt,
     stale: state.snapshotAt !== null,
@@ -211,7 +213,7 @@ function acknowledgeRun(state: ProducerState, event: RunStartedEvent): ProducerS
     state.status !== 'initializing' ||
     !sameProducerSettings(event.activeSettings, state.pendingSettings)
   ) {
-    return failedState(state, 'protocol');
+    return failedState(state, ProducerErrorCode.Protocol);
   }
   return {
     ...state,
@@ -224,11 +226,12 @@ function acceptStatus(state: ProducerState, event: StatusChangedEvent): Producer
   const transition = STATUS_TRANSITIONS[event.status].find(
     (candidate) => candidate.from === state.status && candidate.allowed(state),
   );
-  return transition?.enter(state) ?? failedState(state, 'protocol');
+  return transition?.enter(state) ?? failedState(state, ProducerErrorCode.Protocol);
 }
 
 function acceptSnapshot(state: ProducerState, event: SnapshotEvent): ProducerState {
-  if (!SNAPSHOT_RULES.every((rule) => rule(state, event))) return failedState(state, 'protocol');
+  if (!SNAPSHOT_RULES.every((rule) => rule(state, event)))
+    return failedState(state, ProducerErrorCode.Protocol);
   try {
     return {
       ...state,
@@ -244,12 +247,13 @@ function acceptSnapshot(state: ProducerState, event: SnapshotEvent): ProducerSta
       snapshotAt: event.timestampMs,
     };
   } catch {
-    return failedState(state, 'metric-failure');
+    return failedState(state, ProducerErrorCode.MetricFailure);
   }
 }
 
 function acceptPace(state: ProducerState, event: PaceChangedEvent): ProducerState {
-  if (!state.runAcknowledged || state.status !== 'running') return failedState(state, 'protocol');
+  if (!state.runAcknowledged || state.status !== 'running')
+    return failedState(state, ProducerErrorCode.Protocol);
   return { ...state, slow: event.slow };
 }
 

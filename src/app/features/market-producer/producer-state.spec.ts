@@ -1,6 +1,7 @@
 import { INITIAL_PRODUCER_STATE, reduceProducerState } from './producer-state';
 import type { ProducerState } from './producer-state';
 import { DEFAULT_PRODUCER_SETTINGS } from './producer-settings';
+import { ProducerErrorCode } from './market-producer.types';
 
 function initializingState(): ProducerState {
   return reduceProducerState(INITIAL_PRODUCER_STATE, {
@@ -67,7 +68,10 @@ describe('producer state transitions', () => {
 
   it('allows a new run after a failure but ignores further events for the failed run', () => {
     const running = runningState();
-    const failed = reduceProducerState(running, { type: 'failure', code: 'worker-crash' });
+    const failed = reduceProducerState(running, {
+      type: 'failure',
+      code: ProducerErrorCode.WorkerCrash,
+    });
     const ignored = reduceProducerState(failed, {
       type: 'worker-event',
       event: { type: 'pace-changed', runId: running.runId, slow: true },

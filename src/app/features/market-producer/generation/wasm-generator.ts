@@ -11,6 +11,7 @@ import {
 } from 'rxjs';
 import { financialDecimal } from '../../../core/money/financial-decimal';
 import { isIntegerInRange } from '../../../core/validation/integer-range';
+import { ProducerErrorCode } from '../market-producer.types';
 import type { MarketUpdate } from '../market-producer.types';
 import { ProducerFault } from '../producer-error';
 import {
@@ -90,7 +91,7 @@ export class WasmFetchFault extends ProducerFault {
     readonly retryable: boolean,
     cause?: unknown,
   ) {
-    super('wasm-fetch', cause);
+    super(ProducerErrorCode.WasmFetch, cause);
   }
 }
 
@@ -107,36 +108,36 @@ export class MarketGenerator implements GeneratorPort {
   initialize(instrumentCount: number, seed: number): void {
     this.instrumentCount = 0;
     if (!isGeneratorInstrumentCount(instrumentCount) || !isGeneratorSeed(seed)) {
-      throw new ProducerFault('protocol');
+      throw new ProducerFault(ProducerErrorCode.Protocol);
     }
 
     try {
       if (this.wasm.initialize(instrumentCount, seed) !== 0) {
-        throw new ProducerFault('wasm-abi');
+        throw new ProducerFault(ProducerErrorCode.WasmAbi);
       }
     } catch (error: unknown) {
       if (error instanceof ProducerFault) throw error;
-      throw new ProducerFault('generation', error);
+      throw new ProducerFault(ProducerErrorCode.Generation, error);
     }
     this.instrumentCount = instrumentCount;
   }
 
   generateBatch(batchSize: number): readonly MarketUpdate[] {
     if (this.instrumentCount === 0 || !isGeneratorBatchSize(batchSize)) {
-      throw new ProducerFault('protocol');
+      throw new ProducerFault(ProducerErrorCode.Protocol);
     }
 
     let pointer: number;
     try {
       pointer = this.wasm.generateBatch(batchSize);
     } catch (error: unknown) {
-      throw new ProducerFault('generation', error);
+      throw new ProducerFault(ProducerErrorCode.Generation, error);
     }
 
     const buffer = this.wasm.memory.buffer;
     const byteCount = batchSize * RECORD_BYTES;
     if (!isOutputSlice(pointer, byteCount, buffer.byteLength)) {
-      throw new ProducerFault('wasm-abi', {
+      throw new ProducerFault(ProducerErrorCode.WasmAbi, {
         expected: 'an aligned pointer to the complete output batch',
         observed: { pointer, byteCount, memoryBytes: buffer.byteLength },
       });
@@ -157,7 +158,7 @@ export class MarketGenerator implements GeneratorPort {
       };
 
       if (!RECORD_RULES.every((rule) => rule(decoded, this.instrumentCount))) {
-        throw new ProducerFault('invalid-update', {
+        throw new ProducerFault(ProducerErrorCode.InvalidUpdate, {
           record,
           expected: 'a valid trade and bid/ask snapshot',
           observed: decoded,
@@ -182,7 +183,8 @@ export async function loadMarketGenerator(
   url: string,
   signal?: AbortSignal,
 ): Promise<GeneratorPort> {
-  if (typeof WebAssembly === 'undefined') throw new ProducerFault('worker-unavailable');
+  if (typeof WebAssembly === 'undefined')
+    throw new ProducerFault(ProducerErrorCode.WorkerUnavailable);
 
   const bytes = await firstValueFrom(
     defer(() => from(fetch(url, { signal: signal ?? null }))).pipe(
@@ -234,18 +236,18 @@ export async function loadMarketGenerator(
       ),
     ));
   } catch (error: unknown) {
-    throw new ProducerFault('wasm-instantiate', error);
+    throw new ProducerFault(ProducerErrorCode.WasmInstantiate, error);
   }
 
   const exports = instance.exports;
-  if (!hasRequiredExports(exports)) throw new ProducerFault('wasm-abi');
+  if (!hasRequiredExports(exports)) throw new ProducerFault(ProducerErrorCode.WasmAbi);
 
   try {
     if (exports.abiVersion() !== ABI_VERSION || exports.recordWidth() !== RECORD_WIDTH) {
-      throw new ProducerFault('wasm-abi');
+      throw new ProducerFault(ProducerErrorCode.WasmAbi);
     }
   } catch (error: unknown) {
-    throw new ProducerFault('wasm-abi', error);
+    throw new ProducerFault(ProducerErrorCode.WasmAbi, error);
   }
 
   return new MarketGenerator({

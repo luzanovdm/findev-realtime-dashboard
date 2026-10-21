@@ -5,21 +5,34 @@ import { PRODUCER_SETTING_CONSTRAINTS } from './producer-settings';
 
 export type ProducerStatus = 'initializing' | 'running' | 'paused' | 'error';
 
-export type ProducerErrorCode =
-  | 'worker-unavailable'
-  | 'wasm-fetch'
-  | 'wasm-instantiate'
-  | 'worker-crash'
-  | 'worker-timeout'
-  | 'generation'
-  | 'wasm-abi'
-  | 'protocol'
-  | 'invalid-update'
-  | 'metric-failure';
+export enum ProducerErrorCode {
+  WorkerUnavailable = 'worker-unavailable',
+  WasmFetch = 'wasm-fetch',
+  WasmInstantiate = 'wasm-instantiate',
+  WorkerCrash = 'worker-crash',
+  WorkerTimeout = 'worker-timeout',
+  Generation = 'generation',
+  WasmAbi = 'wasm-abi',
+  Protocol = 'protocol',
+  InvalidUpdate = 'invalid-update',
+  MetricFailure = 'metric-failure',
+}
 
-export type ProducerErrorSeverity = 'environment' | 'run-error' | 'integrity-critical';
-export type ProducerDataDisposition = 'hide' | 'stale';
-export type ProducerRecoveryAction = 'none' | 'start-new-run';
+export enum ProducerErrorSeverity {
+  Environment = 'environment',
+  RunError = 'run-error',
+  IntegrityCritical = 'integrity-critical',
+}
+
+export enum ProducerDataDisposition {
+  Hide = 'hide',
+  Stale = 'stale',
+}
+
+export enum ProducerRecoveryAction {
+  None = 'none',
+  StartNewRun = 'start-new-run',
+}
 
 export interface ProducerError {
   readonly code: ProducerErrorCode;

@@ -26,6 +26,8 @@ import {
   isProducerSettings,
 } from './producer-settings';
 import type { ProducerSettings } from './producer-settings';
+import { ProducerErrorCode, ProducerRecoveryAction } from './market-producer.types';
+import type { ProducerStatus } from './market-producer.types';
 import { ProducerSettingsStorage } from './producer-settings-storage';
 import { isProducerWorkerEvent } from './generation/worker.protocol';
 import type { ProducerWorkerCommand } from './generation/worker.protocol';
@@ -35,14 +37,31 @@ import type { ProducerAction } from './producer-state';
 const LIVENESS_DEADLINE_MS = 5_000;
 const OUTCOME_DEADLINE_MS = LIVENESS_DEADLINE_MS + 1_000;
 
-export type RunOutcome = 'running' | 'error' | 'replaced' | 'timeout';
+export enum RunOutcome {
+  Running = 'running',
+  Error = 'error',
+  Replaced = 'replaced',
+  Timeout = 'timeout',
+}
+
+export enum SettingsSaveStatus {
+  Saved = 'saved',
+  Unavailable = 'unavailable',
+}
+
+const RUN_OUTCOME_BY_STATUS = {
+  initializing: null,
+  running: RunOutcome.Running,
+  paused: null,
+  error: RunOutcome.Error,
+} satisfies Readonly<Record<ProducerStatus, RunOutcome | null>>;
 
 @Injectable({ providedIn: 'root' })
 export class MarketProducerFacade {
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   private readonly settingsStorage = inject(ProducerSettingsStorage);
-  private readonly settingsSaveState = signal<'saved' | 'unavailable' | null>(null);
+  private readonly settingsSaveState = signal<SettingsSaveStatus | null>(null);
   private readonly actions = new Subject<ProducerAction>();
   private readonly state$ = this.actions.pipe(
     scan(reduceProducerState, INITIAL_PRODUCER_STATE),
@@ -88,7 +107,8 @@ export class MarketProducerFacade {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((runId) => {
-        if (runId === this.runId()) this.actions.next({ type: 'failure', code: 'worker-timeout' });
+        if (runId === this.runId())
+          this.actions.next({ type: 'failure', code: ProducerErrorCode.WorkerTimeout });
       });
 
     const visible$ = fromEvent(this.document, 'visibilitychange').pipe(
@@ -116,7 +136,7 @@ export class MarketProducerFacade {
       )
       .subscribe((runId) => {
         if (runId === this.runId() && this.status() === 'running') {
-          this.actions.next({ type: 'failure', code: 'worker-timeout' });
+          this.actions.next({ type: 'failure', code: ProducerErrorCode.WorkerTimeout });
         }
       });
 
@@ -158,9 +178,13 @@ export class MarketProducerFacade {
 
   apply(settings: ProducerSettings): boolean {
     const producerReady = this.started && !this.disposed && this.status() !== 'initializing';
-    const recoveryAllowed = this.error()?.recoveryAction !== 'none';
+    const recoveryAllowed = this.error()?.recoveryAction !== ProducerRecoveryAction.None;
     if (!producerReady || !recoveryAllowed || !isProducerSettings(settings)) return false;
-    this.settingsSaveState.set(this.settingsStorage.save(settings) ? 'saved' : 'unavailable');
+    this.settingsSaveState.set(
+      this.settingsStorage.save(settings)
+        ? SettingsSaveStatus.Saved
+        : SettingsSaveStatus.Unavailable,
+    );
     this.beginRun(copyProducerSettings(settings));
     return true;
   }
@@ -172,13 +196,12 @@ export class MarketProducerFacade {
   outcomeOf(runId: number): Observable<RunOutcome> {
     return this.state$.pipe(
       map((state): RunOutcome | null => {
-        if (state.runId > runId) return 'replaced';
+        if (state.runId > runId) return RunOutcome.Replaced;
         if (state.runId !== runId) return null;
-        if (state.status === 'running' || state.status === 'error') return state.status;
-        return null;
+        return RUN_OUTCOME_BY_STATUS[state.status];
       }),
       filter((outcome): outcome is RunOutcome => outcome !== null),
-      timeout({ first: OUTCOME_DEADLINE_MS, with: () => of('timeout' as const) }),
+      timeout({ first: OUTCOME_DEADLINE_MS, with: () => of(RunOutcome.Timeout) }),
       take(1),
     );
   }
@@ -186,7 +209,7 @@ export class MarketProducerFacade {
   private beginRun(settings: ProducerSettings): void {
     this.actions.next({ type: 'begin', settings });
     if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined') {
-      this.actions.next({ type: 'failure', code: 'worker-unavailable' });
+      this.actions.next({ type: 'failure', code: ProducerErrorCode.WorkerUnavailable });
       return;
     }
     if (!this.ensureWorker()) return;
@@ -201,7 +224,7 @@ export class MarketProducerFacade {
         wasmUrl: new URL('wasm/market-generator.wasm', this.document.baseURI).href,
       });
     } catch {
-      this.actions.next({ type: 'failure', code: 'worker-unavailable' });
+      this.actions.next({ type: 'failure', code: ProducerErrorCode.WorkerUnavailable });
     }
   }
 
@@ -212,12 +235,14 @@ export class MarketProducerFacade {
         type: 'module',
       });
       worker.onmessage = ({ data }: MessageEvent<unknown>) => this.receive(data);
-      worker.onerror = () => this.actions.next({ type: 'failure', code: 'worker-crash' });
-      worker.onmessageerror = () => this.actions.next({ type: 'failure', code: 'protocol' });
+      worker.onerror = () =>
+        this.actions.next({ type: 'failure', code: ProducerErrorCode.WorkerCrash });
+      worker.onmessageerror = () =>
+        this.actions.next({ type: 'failure', code: ProducerErrorCode.Protocol });
       this.worker = worker;
       return true;
     } catch {
-      this.actions.next({ type: 'failure', code: 'worker-unavailable' });
+      this.actions.next({ type: 'failure', code: ProducerErrorCode.WorkerUnavailable });
       return false;
     }
   }
@@ -226,7 +251,7 @@ export class MarketProducerFacade {
     try {
       this.worker?.postMessage(command);
     } catch {
-      this.actions.next({ type: 'failure', code: 'worker-crash' });
+      this.actions.next({ type: 'failure', code: ProducerErrorCode.WorkerCrash });
     }
   }
 
@@ -236,7 +261,7 @@ export class MarketProducerFacade {
       if (typeof value.runId === 'number' && value.runId < this.runId()) return;
     }
     if (!isProducerWorkerEvent(value) || value.runId !== this.runId()) {
-      this.actions.next({ type: 'failure', code: 'protocol' });
+      this.actions.next({ type: 'failure', code: ProducerErrorCode.Protocol });
       return;
     }
     this.actions.next({ type: 'worker-event', event: value });

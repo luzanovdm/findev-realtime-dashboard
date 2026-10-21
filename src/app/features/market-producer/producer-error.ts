@@ -1,64 +1,68 @@
-import type { ProducerError, ProducerErrorCode } from './market-producer.types';
+import {
+  ProducerDataDisposition,
+  ProducerErrorCode,
+  ProducerErrorSeverity,
+  ProducerRecoveryAction,
+} from './market-producer.types';
+import type { ProducerError } from './market-producer.types';
+
+const ERROR_POLICIES = {
+  environment: {
+    severity: ProducerErrorSeverity.Environment,
+    dataDisposition: ProducerDataDisposition.Hide,
+    recoveryAction: ProducerRecoveryAction.None,
+  },
+  recoverable: {
+    severity: ProducerErrorSeverity.RunError,
+    dataDisposition: ProducerDataDisposition.Stale,
+    recoveryAction: ProducerRecoveryAction.StartNewRun,
+  },
+  integrity: {
+    severity: ProducerErrorSeverity.IntegrityCritical,
+    dataDisposition: ProducerDataDisposition.Hide,
+    recoveryAction: ProducerRecoveryAction.StartNewRun,
+  },
+} as const satisfies Readonly<Record<string, Omit<ProducerError, 'code' | 'message'>>>;
 
 const ERROR_CATALOGUE = {
-  'worker-unavailable': {
-    severity: 'environment',
-    dataDisposition: 'hide',
-    recoveryAction: 'none',
+  [ProducerErrorCode.WorkerUnavailable]: {
+    ...ERROR_POLICIES.environment,
     message: 'This browser cannot run the market producer.',
   },
-  'wasm-fetch': {
-    severity: 'run-error',
-    dataDisposition: 'stale',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.WasmFetch]: {
+    ...ERROR_POLICIES.recoverable,
     message: 'Market data could not be loaded. Start a new run to try again.',
   },
-  'wasm-instantiate': {
-    severity: 'run-error',
-    dataDisposition: 'stale',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.WasmInstantiate]: {
+    ...ERROR_POLICIES.recoverable,
     message: 'The market generator could not start. Start a new run to try again.',
   },
-  'worker-crash': {
-    severity: 'run-error',
-    dataDisposition: 'stale',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.WorkerCrash]: {
+    ...ERROR_POLICIES.recoverable,
     message: 'Market data stopped unexpectedly. Displayed values are outdated. Start a new run.',
   },
-  'worker-timeout': {
-    severity: 'run-error',
-    dataDisposition: 'stale',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.WorkerTimeout]: {
+    ...ERROR_POLICIES.recoverable,
     message: 'The market producer stopped responding. Start a new run.',
   },
-  generation: {
-    severity: 'run-error',
-    dataDisposition: 'stale',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.Generation]: {
+    ...ERROR_POLICIES.recoverable,
     message: 'Market data generation stopped. Start a new run.',
   },
-  'wasm-abi': {
-    severity: 'integrity-critical',
-    dataDisposition: 'hide',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.WasmAbi]: {
+    ...ERROR_POLICIES.integrity,
     message: 'The market generator is incompatible. Values are unavailable.',
   },
-  protocol: {
-    severity: 'integrity-critical',
-    dataDisposition: 'hide',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.Protocol]: {
+    ...ERROR_POLICIES.integrity,
     message: 'Market data failed validation. Values are unavailable. Start a new run.',
   },
-  'invalid-update': {
-    severity: 'integrity-critical',
-    dataDisposition: 'hide',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.InvalidUpdate]: {
+    ...ERROR_POLICIES.integrity,
     message: 'Market data failed validation. Values are unavailable. Start a new run.',
   },
-  'metric-failure': {
-    severity: 'integrity-critical',
-    dataDisposition: 'hide',
-    recoveryAction: 'start-new-run',
+  [ProducerErrorCode.MetricFailure]: {
+    ...ERROR_POLICIES.integrity,
     message: 'Market metrics could not be verified. Values are unavailable. Start a new run.',
   },
 } as const satisfies Readonly<Record<ProducerErrorCode, Omit<ProducerError, 'code'>>>;

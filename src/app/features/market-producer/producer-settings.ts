@@ -29,7 +29,12 @@ export const DEFAULT_PRODUCER_SETTINGS: Readonly<ProducerSettings> = Object.free
   batchIntervalMs: PRODUCER_SETTING_CONSTRAINTS.batchIntervalMs.defaultValue,
 });
 
-export type ProducerSettingIssueCode = 'not-number' | 'not-finite' | 'not-integer' | 'out-of-range';
+export enum ProducerSettingIssueCode {
+  NotNumber = 'not-number',
+  NotFinite = 'not-finite',
+  NotInteger = 'not-integer',
+  OutOfRange = 'out-of-range',
+}
 
 export interface ProducerSettingIssue {
   readonly field: ProducerSettingName;
@@ -79,10 +84,11 @@ function validateSettingValue(
   value: unknown,
   constraint: ProducerSettingConstraint,
 ): ProducerSettingIssueCode | null {
-  if (typeof value !== 'number') return 'not-number';
-  if (!Number.isFinite(value)) return 'not-finite';
-  if (!Number.isInteger(value)) return 'not-integer';
-  if (value < constraint.minimum || value > constraint.maximum) return 'out-of-range';
+  if (typeof value !== 'number') return ProducerSettingIssueCode.NotNumber;
+  if (!Number.isFinite(value)) return ProducerSettingIssueCode.NotFinite;
+  if (!Number.isInteger(value)) return ProducerSettingIssueCode.NotInteger;
+  if (value < constraint.minimum || value > constraint.maximum)
+    return ProducerSettingIssueCode.OutOfRange;
 
   return null;
 }

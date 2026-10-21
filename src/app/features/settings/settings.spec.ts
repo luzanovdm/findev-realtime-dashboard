@@ -81,7 +81,7 @@ describe('Settings form', () => {
     await fixture.whenStable();
     expect(producer.apply).not.toHaveBeenCalled();
     expect(producer.activeSettings().instrumentCount).toBe(5);
-    expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
+    expect(fixture.componentInstance.form.draft().instrumentCount).toBe('2');
   });
 
   it('blocks an empty or fractional draft and shows field errors', async () => {
@@ -127,11 +127,11 @@ describe('Settings form', () => {
     producer.outcomes.next('running');
     await fixture.whenStable();
     await vi.waitFor(() =>
-      expect(fixture.componentInstance.settingsForm().submitting()).toBe(false),
+      expect(fixture.componentInstance.form.settingsForm().submitting()).toBe(false),
     );
     fixture.detectChanges();
-    expect(fixture.componentInstance.settingsForm().dirty()).toBe(false);
-    expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
+    expect(fixture.componentInstance.form.settingsForm().dirty()).toBe(false);
+    expect(fixture.componentInstance.form.draft().instrumentCount).toBe('2');
     expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
       'Saved in this browser',
     );
@@ -148,7 +148,7 @@ describe('Settings form', () => {
     await fixture.whenStable();
     producer.activeSettings.set({ instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 });
     await fixture.whenStable();
-    expect(fixture.componentInstance.draft().instrumentCount).toBe('3');
+    expect(fixture.componentInstance.form.draft().instrumentCount).toBe('3');
   });
 
   it('explains when a live Apply could not be saved across reloads', async () => {
@@ -164,7 +164,7 @@ describe('Settings form', () => {
     producer.outcomes.next('running');
     await fixture.whenStable();
     await vi.waitFor(() =>
-      expect(fixture.componentInstance.settingsForm().submitting()).toBe(false),
+      expect(fixture.componentInstance.form.settingsForm().submitting()).toBe(false),
     );
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
@@ -177,12 +177,12 @@ describe('Settings form', () => {
     const fixture = await createSettings(producer);
     producer.activeSettings.set({ instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 });
     await fixture.whenStable();
-    expect(fixture.componentInstance.draft()).toEqual({
+    expect(fixture.componentInstance.form.draft()).toEqual({
       instrumentCount: '2',
       updatesPerBatch: '10',
       batchIntervalMs: '50',
     });
-    expect(fixture.componentInstance.settingsForm().dirty()).toBe(false);
+    expect(fixture.componentInstance.form.settingsForm().dirty()).toBe(false);
   });
 
   it('keeps the submitted draft and explains a failed new run', async () => {
@@ -196,17 +196,19 @@ describe('Settings form', () => {
     producer.outcomes.next('error');
     await fixture.whenStable();
     await vi.waitFor(() =>
-      expect(fixture.componentInstance.settingsForm().submitting()).toBe(false),
+      expect(fixture.componentInstance.form.settingsForm().submitting()).toBe(false),
     );
     fixture.detectChanges();
-    expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
-    expect(fixture.componentInstance.visibleFormError()).toContain('The new run could not start');
+    expect(fixture.componentInstance.form.draft().instrumentCount).toBe('2');
+    expect(fixture.componentInstance.form.visibleFormError()).toContain(
+      'The new run could not start',
+    );
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
       'The new run could not start',
     );
     edit(fixture, 'instrument-count', '3');
     await fixture.whenStable();
-    expect(fixture.componentInstance.visibleFormError()).toBeUndefined();
+    expect(fixture.componentInstance.form.visibleFormError()).toBeUndefined();
   });
 
   it('releases the pending run outcome when the settings route is destroyed', async () => {

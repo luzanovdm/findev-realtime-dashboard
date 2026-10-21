@@ -6,21 +6,21 @@
   <button
     tuiButton
     type="button"
-    [disabled]="!producer.canPause() && !producer.canResume()"
-    (click)="toggleGeneration()"
+    [disabled]="!dashboard.canToggle()"
+    (click)="dashboard.toggleGeneration()"
   >
-    {{ presentation().controlLabel }}
+    {{ dashboard.presentation().controlLabel }}
   </button>
 </div>
 
 <p class="producer-status" role="status" aria-live="polite">
-  {{ presentation().message }}
-  @if (producer.stale()) {
+  {{ dashboard.presentation().message }}
+  @if (dashboard.stale()) {
     Last confirmed values are outdated.
   }
-  @if (producer.slow()) {
+  @if (dashboard.slow()) {
     Updates are arriving more slowly than the requested interval.
   }
 </p>
 
-<app-instrument-table [metrics]="producer.metrics()" />
+<app-instrument-table [metrics]="dashboard.metrics()" />

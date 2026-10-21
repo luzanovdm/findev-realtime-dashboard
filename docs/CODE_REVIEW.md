@@ -34,9 +34,9 @@
    successful acknowledgement. `FormRoot` owns submission, dirty/touched state, and auto-clearing
    submission errors; reading `form().dirty()` from the linked draft would create a signal cycle.
 4. Dashboard status text and control labels were scattered across a template switch and conditional
-   expression. A typed status-to-presentation table now owns that static copy. The component retains
-   a guarded click handler because it crosses from a user event into producer commands. Pure Angular
-   pipes expose the Decimal and `bigint` formatters to the dashboard template.
+   expression. A typed status-to-presentation table now owns that static copy. The route-scoped
+   dashboard service handles the guarded Pause/Resume command; the component only binds its view.
+   Pure Angular pipes expose the Decimal and `bigint` formatters to the dashboard template.
 5. Slow delivery now has a bounded, nonblocking warning. Diagnostics include a stable code, run ID,
    lifecycle stage, and available cause or expected/observed facts without exposing those details in
    the interface. Repeated malformed commands cannot flood the same run with failure events.
@@ -76,6 +76,7 @@ loop because it validates every generated trade at up to 20,000 updates per seco
 | Duplicate object guards                            | Settings validation, metric ingress, and worker protocol use one `core/validation/is-record` guard.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Flat dashboard presentation files                  | USD cents formatting and its pipe now live in `core/money`; digit grouping shared with bigint volume lives in `core/numbers`. The instrument table owns its Angular component, template, styles, and market-specific volume and imbalance pipes under `dashboard/instrument-table`.                                                                                                                                                                                                                                                                                                        |
 | Pending form outcome subscription                  | The Settings route now cancels its wait for a run acknowledgement when destroyed. A component test checks that the observable has no remaining subscriber after route teardown.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Workflow logic in route components                 | `SettingsFormService` owns the Signal Form draft, validation registration, Apply outcome, and feedback. `DashboardService` owns status presentation and guarded producer commands. Both are provided by their route components, so local state and subscriptions end with the route. The components contain only view imports and service injection.                                                                                                                                                                                                                                       |
 
 The table is capped at 50 rows by `TASK.md`. The current maximum-rate browser sample found no task
 over 50 ms in ten seconds and rendered all 50 semantic rows without page-width overflow. Virtual

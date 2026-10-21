@@ -58,6 +58,13 @@ The soak validates accounting for the number of batches actually generated. The 
 interval is pacing between completed batches, so throughput may be below the nominal 20,000 updates
 per second under host scheduling or worker processing load.
 
+The route-service extraction passed `npm run check` on October 22, 2026: repository formatting,
+strict application/worker/spec TypeScript checks, 156 Angular/Vitest tests, eight compiled-Wasm and
+production-worker tests, and the production build. The Settings component tests cover draft
+preservation, validation, Apply feedback, and cancellation of a pending run outcome when its route is
+destroyed. Dashboard component tests cover status, Pause/Resume, and retained values. This verification
+does not replace the earlier browser and soak observations.
+
 The browser observations are local acceptance evidence, not a claim about every device or deployed
 host. The GitHub repository remains private. Cloudflare Pages has no GitHub connection or Pages
 project for this repository yet. Remote route refreshes, Wasm response headers, a public demo, and

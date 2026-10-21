@@ -96,6 +96,7 @@ src/app/
         metric-accumulator.ts
     dashboard/                 observe and control the active run
       dashboard.ts
+      dashboard.service.ts     route-scoped status presentation and producer controls
       instrument-table/        table-specific metric presentation
         instrument-table.ts
         instrument-table.html
@@ -105,6 +106,8 @@ src/app/
         imbalance.pipe.ts
     settings/                  edit and apply a new producer run
       settings.ts
+      settings-form.service.ts route-scoped Signal Form, draft, and Apply lifecycle
+      settings-draft.ts        pure draft conversion and validation
 assembly/
   index.ts                     stateful generator and binary ABI
 ```
@@ -120,7 +123,7 @@ Dependency rules:
 - `dashboard` and `settings` access the producer only through its public facade and contracts.
 - Features may import purpose-named `core` modules directly; `core` never imports a feature.
 - `dashboard` does not calculate cumulative metrics.
-- `settings` owns draft form state; it does not own the active producer settings.
+- `settings` owns draft form state in a route-scoped service; it does not own the active producer settings.
 - Worker-only modules do not import Angular or DOM APIs.
 - `app` composes features and routes; it contains no market rules.
 - `assembly` is a separate compilation boundary and cannot import application TypeScript.
@@ -136,8 +139,8 @@ Dependency rules:
 | Worker controller       | RxJS run and control streams, Wasm calls, metric fold         | One dedicated worker per application |
 | Metric accumulator      | Decimal quote/trade values, cumulative volume and notional    | Current run only                     |
 | Angular producer facade | Worker ownership, validated event intake, readonly UI signals | Application lifetime                 |
-| Settings route          | Editable draft and validation state                           | Route component lifetime             |
-| Dashboard route         | Table and control presentation                                | Route component lifetime             |
+| Settings form service   | Editable draft, validation, Apply outcome, and feedback       | Settings route lifetime              |
+| Dashboard service       | Status presentation and guarded producer controls             | Dashboard route lifetime             |
 
 The app shell eagerly creates the root-provided producer facade. The facade owns browser effects and
 feeds validated events into a pure feature-owned state reducer. The reducer uses exhaustive action
@@ -383,8 +386,9 @@ worker object or writable application signals. The facade updates at most 50 row
 snapshot, and rows are tracked by stable symbol. Pure template pipes format Decimal and `bigint`
 values without re-running unchanged cells on unrelated change detection.
 
-The Settings route uses Angular Signal Forms and `FormRoot` for validation, submission state, and
-submission errors. A complete draft object is initialized from active
+The Settings route provides `SettingsFormService` at the component boundary. The service uses Angular
+Signal Forms and `FormRoot` for validation, submission state, and submission errors. A complete draft
+object is initialized from active
 settings when the route opens. Fields require integers and the ranges from `TASK.md`. Editing changes
 only the draft. Apply submits an immutable validated copy; success resets the form to the accepted
 active values and starts a new run. Unsaved draft edits are route-local and may be discarded on
@@ -393,14 +397,16 @@ falls back to defaults without crashing. The task permits reload persistence to 
 product requirement now asks for it. Pause state and cumulative metrics are never restored after a
 reload.
 
-The Dashboard route renders semantic controls and a table. It distinguishes initialization, running,
+The Dashboard route renders semantic controls and a table. Its route-scoped service maps producer
+status to copy and a guarded Pause/Resume command. It distinguishes initialization, running,
 paused, and error states; keeps the last valid values visible while paused; and announces status and
 errors through an `aria-live` region. Controls use native button semantics, form controls have visible
 labels and associated errors, and the table remains operable at 200% zoom with a contained horizontal
 scroll fallback on narrow viewports.
 
-All components use `OnPush` change detection. Angular templates use stable tracking keys. No component
-subscribes to a per-update stream.
+All components use `OnPush` change detection. Angular templates use stable tracking keys. Components
+do not own form submission, producer commands, or per-update subscriptions. The root component only
+starts the application-scoped producer during startup.
 
 ## 10. Throughput and backpressure
 
@@ -476,17 +482,17 @@ connection and push-to-live verification remain pending.
 
 ## 13. Verification strategy
 
-| Layer                     | Evidence                                                                                       |
-| ------------------------- | ---------------------------------------------------------------------------------------------- |
-| Pure domain               | Metric worked example, zero denominators, isolation, settings validation                       |
-| Wasm                      | Compiled module batch size, deterministic seed, state evolution, all record invariants         |
-| Worker controller         | Start, pause, resume, Apply reset, stream cancellation, no catch-up, stale `runId` rejection   |
-| Protocol                  | Runtime rejection of malformed commands, events, exports, pointers, and records                |
-| Angular facade            | One worker, readonly state projection, route-independent lifecycle, stale event rejection      |
-| Components                | Settings validation/submission and dashboard states/controls/formatting/accessibility hooks    |
-| Production integration    | Built worker loads built Wasm over HTTP with correct MIME; missing Wasm produces a typed error |
-| Manual browser acceptance | Route persistence, responsive table, keyboard use, 200% zoom, maximum-rate responsiveness      |
-| Deployment                | Public route refresh, Wasm response headers, automatic redeploy from a known commit            |
+| Layer                      | Evidence                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------- |
+| Pure domain                | Metric worked example, zero denominators, isolation, settings validation                       |
+| Wasm                       | Compiled module batch size, deterministic seed, state evolution, all record invariants         |
+| Worker controller          | Start, pause, resume, Apply reset, stream cancellation, no catch-up, stale `runId` rejection   |
+| Protocol                   | Runtime rejection of malformed commands, events, exports, pointers, and records                |
+| Angular facade             | One worker, readonly state projection, route-independent lifecycle, stale event rejection      |
+| Feature services and views | Settings validation/submission and dashboard states/controls/formatting/accessibility hooks    |
+| Production integration     | Built worker loads built Wasm over HTTP with correct MIME; missing Wasm produces a typed error |
+| Manual browser acceptance  | Route persistence, responsive table, keyboard use, 200% zoom, maximum-rate responsiveness      |
+| Deployment                 | Public route refresh, Wasm response headers, automatic redeploy from a known commit            |
 
 Angular component tests follow zoneless stabilization: act, await `fixture.whenStable()`, then assert.
 Time-dependent tests use a virtual RxJS scheduler. Generator tests call the compiled Wasm rather than a

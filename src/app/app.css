@@ -1,0 +1,38 @@
+.shell {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.brand {
+  color: var(--tui-text-primary);
+  font: var(--tui-typography-heading-h5);
+  text-decoration: none;
+}
+.brand span {
+  display: block;
+  color: var(--tui-text-secondary);
+  font: var(--tui-typography-body-s);
+}
+.navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 2rem 0;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--tui-border-normal);
+}
+.navigation .active {
+  background: var(--tui-background-accent-1);
+  color: var(--tui-text-primary-on-accent-1);
+}
+@media (max-width: 40rem) {
+  .shell {
+    padding: 1.5rem 1rem;
+  }
+}

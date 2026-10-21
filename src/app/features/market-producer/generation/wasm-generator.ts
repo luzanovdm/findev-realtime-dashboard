@@ -165,12 +165,14 @@ export class MarketGenerator implements GeneratorPort {
         });
       }
 
+      const bidCents = financialDecimal(decoded.bidCents);
+      const askCents = financialDecimal(decoded.askCents);
       updates.push({
         instrumentIndex: decoded.instrumentIndex,
-        priceCents: financialDecimal(decoded.priceCents),
+        priceCents: decoded.priceCents === decoded.bidCents ? bidCents : askCents,
         tradeQuantity: BigInt(decoded.tradeQuantity),
-        bidCents: financialDecimal(decoded.bidCents),
-        askCents: financialDecimal(decoded.askCents),
+        bidCents,
+        askCents,
         bidQuantity: BigInt(decoded.bidQuantity),
         askQuantity: BigInt(decoded.askQuantity),
       });

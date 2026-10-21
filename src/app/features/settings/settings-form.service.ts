@@ -74,12 +74,15 @@ export class SettingsFormService {
   } | null>(null);
   readonly visibleFeedback = computed(() => {
     const feedback = this.feedback();
-    return feedback !== null &&
-      feedback.runId === this.producer.runId() &&
-      this.producer.status() !== 'error' &&
-      sameSettingsDraft(feedback.draft, this.draft())
-      ? feedback
-      : null;
+    if (
+      feedback === null ||
+      feedback.runId !== this.producer.runId() ||
+      this.producer.status() === 'error'
+    ) {
+      return null;
+    }
+    if (sameSettingsDraft(feedback.draft, this.draft())) return feedback;
+    return { ...feedback, message: `${feedback.message} Current edits have not been applied.` };
   });
   readonly applyUnavailable = computed(
     () =>
@@ -118,15 +121,16 @@ export class SettingsFormService {
         };
       }
 
-      if (sameSettingsDraft(this.draft(), submittedDraft)) {
+      const submittedDraftStillCurrent = sameSettingsDraft(this.draft(), submittedDraft);
+      if (submittedDraftStillCurrent) {
         this.settingsForm().reset(draftFromSettings(this.producer.activeSettings()));
-        this.feedback.set({
-          runId,
-          draft: this.draft(),
-          warning: saveStatus === SettingsSaveStatus.Unavailable,
-          message: copy.success,
-        });
       }
+      this.feedback.set({
+        runId,
+        draft: submittedDraftStillCurrent ? this.draft() : submittedDraft,
+        warning: saveStatus === SettingsSaveStatus.Unavailable,
+        message: copy.success,
+      });
     } catch {
       if (!this.destroyRef.destroyed) {
         return { kind: 'apply-error', message: 'Settings could not be applied. Try again.' };

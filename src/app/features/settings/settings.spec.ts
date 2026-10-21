@@ -162,7 +162,7 @@ describe('Settings form', () => {
     );
   });
 
-  it('does not replace edits made while a submitted run is starting', async () => {
+  it('preserves new edits and confirms which settings were applied', async () => {
     const producer = fakeProducer();
     const fixture = await createSettings(producer);
     edit(fixture, 'instrument-count', '05');
@@ -178,7 +178,9 @@ describe('Settings form', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.componentInstance.form.draft().instrumentCount).toBe('3');
-    expect(fixture.nativeElement.querySelector('[role="status"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'Saved in this browser. New run live. Current edits have not been applied.',
+    );
   });
 
   it('preserves an unsaved dirty draft when accepted settings change elsewhere', async () => {

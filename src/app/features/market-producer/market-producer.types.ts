@@ -1,5 +1,6 @@
 import type Decimal from 'decimal.js';
-import type { DecimalString } from './financial-decimal';
+import type { DecimalString } from './metrics/financial-decimal';
+import { PRODUCER_SETTING_CONSTRAINTS } from './producer-settings';
 
 export type ProducerStatus = 'initializing' | 'running' | 'paused' | 'error';
 
@@ -56,8 +57,11 @@ export interface SerializedInstrumentMetricSnapshot {
 }
 
 export function instrumentSymbol(instrumentIndex: number): string {
-  if (!Number.isInteger(instrumentIndex) || instrumentIndex < 0 || instrumentIndex >= 50) {
-    throw new RangeError(`Instrument index must be an integer from 0 to 49: ${instrumentIndex}`);
+  const maximum = PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum;
+  if (!Number.isInteger(instrumentIndex) || instrumentIndex < 0 || instrumentIndex >= maximum) {
+    throw new RangeError(
+      `Instrument index must be an integer from 0 to ${maximum - 1}: ${instrumentIndex}`,
+    );
   }
 
   return `ASSET-${String(instrumentIndex + 1).padStart(2, '0')}`;

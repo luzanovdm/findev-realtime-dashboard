@@ -1,4 +1,4 @@
-import { financialDecimal } from '../market-producer/financial-decimal';
+import { financialDecimal } from '../market-producer/metrics/financial-decimal';
 import { formatCurrencyCents, formatImbalance, formatVolume } from './market-metric-formatters';
 
 describe('market metric formatters', () => {

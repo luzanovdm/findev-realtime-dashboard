@@ -1,10 +1,4 @@
-export interface ProducerSettings {
-  readonly instrumentCount: number;
-  readonly updatesPerBatch: number;
-  readonly batchIntervalMs: number;
-}
-
-export type ProducerSettingName = keyof ProducerSettings;
+import { isRecord } from './is-record';
 
 export interface ProducerSettingConstraint {
   readonly minimum: number;
@@ -16,7 +10,18 @@ export const PRODUCER_SETTING_CONSTRAINTS = {
   instrumentCount: { minimum: 1, maximum: 50, defaultValue: 5 },
   updatesPerBatch: { minimum: 1, maximum: 1_000, defaultValue: 100 },
   batchIntervalMs: { minimum: 50, maximum: 2_000, defaultValue: 500 },
-} as const satisfies Readonly<Record<ProducerSettingName, ProducerSettingConstraint>>;
+} as const satisfies Readonly<Record<string, ProducerSettingConstraint>>;
+
+export type ProducerSettingName = keyof typeof PRODUCER_SETTING_CONSTRAINTS;
+export type ProducerSettings = Readonly<Record<ProducerSettingName, number>>;
+
+function isProducerSettingName(name: string): name is ProducerSettingName {
+  return Object.hasOwn(PRODUCER_SETTING_CONSTRAINTS, name);
+}
+
+export const PRODUCER_SETTING_NAMES: readonly ProducerSettingName[] = Object.keys(
+  PRODUCER_SETTING_CONSTRAINTS,
+).filter(isProducerSettingName);
 
 export const DEFAULT_PRODUCER_SETTINGS: Readonly<ProducerSettings> = Object.freeze({
   instrumentCount: PRODUCER_SETTING_CONSTRAINTS.instrumentCount.defaultValue,
@@ -33,16 +38,10 @@ export interface ProducerSettingIssue {
   readonly maximum: number;
 }
 
-const SETTING_NAMES = [
-  'instrumentCount',
-  'updatesPerBatch',
-  'batchIntervalMs',
-] as const satisfies readonly ProducerSettingName[];
-
 export function validateProducerSettings(value: unknown): readonly ProducerSettingIssue[] {
   const candidate = isRecord(value) ? value : {};
 
-  return SETTING_NAMES.flatMap((field): readonly ProducerSettingIssue[] => {
+  return PRODUCER_SETTING_NAMES.flatMap((field): readonly ProducerSettingIssue[] => {
     const fieldValue = candidate[field];
     const constraint = PRODUCER_SETTING_CONSTRAINTS[field];
     const issue = validateSettingValue(fieldValue, constraint);
@@ -72,6 +71,10 @@ export function copyProducerSettings(settings: ProducerSettings): ProducerSettin
   };
 }
 
+export function sameProducerSettings(first: ProducerSettings, second: ProducerSettings): boolean {
+  return PRODUCER_SETTING_NAMES.every((field) => first[field] === second[field]);
+}
+
 function validateSettingValue(
   value: unknown,
   constraint: ProducerSettingConstraint,
@@ -82,8 +85,4 @@ function validateSettingValue(
   if (value < constraint.minimum || value > constraint.maximum) return 'out-of-range';
 
   return null;
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

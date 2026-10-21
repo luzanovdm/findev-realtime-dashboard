@@ -2,11 +2,12 @@ import type {
   ProducerErrorCode,
   ProducerStatus,
   SerializedInstrumentMetricSnapshot,
-} from './market-producer.types';
-import { financialDecimal, isDecimalString } from './financial-decimal';
-import { isProducerErrorCode } from './producer-error';
-import { isProducerSettings } from './producer-settings';
-import type { ProducerSettings } from './producer-settings';
+} from '../market-producer.types';
+import { isRecord } from '../is-record';
+import { financialDecimal, isDecimalString } from '../metrics/financial-decimal';
+import { isProducerErrorCode } from '../producer-error';
+import { isProducerSettings, PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';
+import type { ProducerSettings } from '../producer-settings';
 
 export interface StartRunCommand {
   readonly type: 'start-run';
@@ -143,7 +144,11 @@ function isInstrumentMetricSnapshot(value: unknown): value is SerializedInstrume
 }
 
 function isMetricList(value: unknown): value is readonly SerializedInstrumentMetricSnapshot[] {
-  if (!Array.isArray(value) || value.length > 50 || !value.every(isInstrumentMetricSnapshot)) {
+  if (
+    !Array.isArray(value) ||
+    value.length > PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum ||
+    !value.every(isInstrumentMetricSnapshot)
+  ) {
     return false;
   }
 
@@ -157,7 +162,7 @@ function isInstrumentSymbol(value: unknown): value is string {
   if (match === null) return false;
 
   const sequence = Number(match[1]);
-  return sequence >= 1 && sequence <= 50;
+  return sequence >= 1 && sequence <= PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum;
 }
 
 function isProducerStatus(value: unknown): value is ProducerStatus {
@@ -183,8 +188,4 @@ function isNullableImbalance(value: unknown): boolean {
 
   const imbalance = financialDecimal(value);
   return imbalance.greaterThanOrEqualTo(-1) && imbalance.lessThanOrEqualTo(1);
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

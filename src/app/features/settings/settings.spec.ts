@@ -5,12 +5,14 @@ import { Subject } from 'rxjs';
 import { MarketProducerFacade } from '../market-producer/market-producer.facade';
 import { DEFAULT_PRODUCER_SETTINGS } from '../market-producer/producer-settings';
 import { Settings } from './settings';
+import { requiredElement } from '../../testing/required-element';
 
 function fakeProducer() {
   const activeSettings = signal(DEFAULT_PRODUCER_SETTINGS);
   const status = signal<'running' | 'paused' | 'initializing' | 'error'>('running');
   const runId = signal(1);
   const error = signal(null);
+  const settingsSaveStatus = signal<'saved' | 'unavailable' | null>('saved');
   const outcomes = new Subject<'running' | 'error'>();
   const apply = vi.fn((settings: typeof DEFAULT_PRODUCER_SETTINGS) => {
     runId.update((id) => id + 1);
@@ -18,7 +20,7 @@ function fakeProducer() {
     return true;
   });
   const outcomeOf = vi.fn(() => outcomes.asObservable());
-  return { activeSettings, status, runId, error, apply, outcomeOf, outcomes };
+  return { activeSettings, status, runId, error, settingsSaveStatus, apply, outcomeOf, outcomes };
 }
 
 async function createSettings(producer: ReturnType<typeof fakeProducer>) {
@@ -40,14 +42,14 @@ function edit(
   id: string,
   value: string,
 ): void {
-  const input = fixture.nativeElement.querySelector(`#${id}`) as HTMLInputElement;
+  const input = requiredElement(fixture.nativeElement, `#${id}`, HTMLInputElement);
   input.value = value;
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('blur', { bubbles: true }));
 }
 
 function submitForm(fixture: ReturnType<typeof TestBed.createComponent<Settings>>): void {
-  const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+  const form = requiredElement(fixture.nativeElement, 'form', HTMLFormElement);
   form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 }
 
@@ -66,12 +68,12 @@ describe('Settings form', () => {
     const producer = fakeProducer();
     const fixture = await createSettings(producer);
     expect(
-      (fixture.nativeElement.querySelector('#instrument-count') as HTMLInputElement).value,
+      requiredElement(fixture.nativeElement, '#instrument-count', HTMLInputElement).value,
     ).toBe('5');
     expect(
-      (fixture.nativeElement.querySelector('#updates-per-batch') as HTMLInputElement).value,
+      requiredElement(fixture.nativeElement, '#updates-per-batch', HTMLInputElement).value,
     ).toBe('100');
-    expect((fixture.nativeElement.querySelector('#batch-interval') as HTMLInputElement).value).toBe(
+    expect(requiredElement(fixture.nativeElement, '#batch-interval', HTMLInputElement).value).toBe(
       '500',
     );
 
@@ -114,13 +116,22 @@ describe('Settings form', () => {
       updatesPerBatch: 10,
       batchIntervalMs: 50,
     });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button[type="submit"]')?.textContent).toContain(
+      'Applying',
+    );
+    expect(fixture.nativeElement.querySelector('button[type="submit"]')?.disabled).toBe(true);
 
     producer.activeSettings.set({ instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 });
     producer.status.set('running');
     producer.outcomes.next('running');
     await fixture.whenStable();
+    fixture.detectChanges();
     expect(fixture.componentInstance.settingsForm().dirty()).toBe(false);
     expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'Saved in this browser',
+    );
   });
 
   it('preserves an unsaved dirty draft when accepted settings change elsewhere', async () => {
@@ -131,6 +142,24 @@ describe('Settings form', () => {
     producer.activeSettings.set({ instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 });
     await fixture.whenStable();
     expect(fixture.componentInstance.draft().instrumentCount).toBe('3');
+  });
+
+  it('explains when a live Apply could not be saved across reloads', async () => {
+    const producer = fakeProducer();
+    producer.settingsSaveStatus.set('unavailable');
+    const fixture = await createSettings(producer);
+    edit(fixture, 'instrument-count', '2');
+    await fixture.whenStable();
+    submitForm(fixture);
+    await fixture.whenStable();
+    producer.activeSettings.set({ instrumentCount: 2, updatesPerBatch: 100, batchIntervalMs: 500 });
+    producer.status.set('running');
+    producer.outcomes.next('running');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'settings will reset after reload',
+    );
   });
 
   it('refreshes a pristine draft when accepted settings change elsewhere', async () => {
@@ -156,7 +185,9 @@ describe('Settings form', () => {
     producer.status.set('error');
     producer.outcomes.next('error');
     await fixture.whenStable();
+    fixture.detectChanges();
     expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
+    expect(fixture.componentInstance.visibleFormError()).toContain('The new run could not start');
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
       'The new run could not start',
     );

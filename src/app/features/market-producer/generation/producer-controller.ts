@@ -26,9 +26,9 @@ import {
   accumulateMetricBatch,
   createMetricState,
   serializedMetricSnapshot,
-} from './metric-accumulator';
-import type { MetricState } from './metric-accumulator';
-import { producerErrorCode, ProducerFault } from './producer-error';
+} from '../metrics/metric-accumulator';
+import type { MetricState } from '../metrics/metric-accumulator';
+import { producerErrorCode, ProducerFault } from '../producer-error';
 import type { GeneratorPort } from './wasm-generator';
 import { isProducerWorkerCommand } from './worker.protocol';
 import type {
@@ -79,6 +79,7 @@ const MODE_FOR_CONTROL = { pause: 'paused', resume: 'running' } as const satisfi
 type ActiveInput =
   | { readonly kind: 'mode'; readonly mode: RunMode; readonly initial: boolean }
   | { readonly kind: 'batch'; readonly updates: ReturnType<GeneratorPort['generateBatch']> };
+type ModeInput = Extract<ActiveInput, { kind: 'mode' }>;
 
 interface ActiveState {
   readonly metrics: MetricState;
@@ -108,6 +109,15 @@ interface EmissionState {
   readonly event: ProducerWorkerEvent | null;
 }
 
+const INITIAL_ROUTE_STATE: RouteState = {
+  currentRunId: 0,
+  protocolFailedRunId: null,
+  disposed: false,
+  transition: null,
+};
+
+const INITIAL_EMISSION_STATE: EmissionState = { failedRunId: null, event: null };
+
 export class ProducerController {
   private readonly input = new Subject<unknown>();
 
@@ -115,15 +125,12 @@ export class ProducerController {
     const commands = this.input.pipe(map(decodeCommand), share());
     commands
       .pipe(
-        scan(routeCommand, {
-          currentRunId: 0,
-          protocolFailedRunId: null,
-          disposed: false,
-          transition: null,
-        } as RouteState),
+        scan(routeCommand, INITIAL_ROUTE_STATE),
         takeWhile((state) => !state.disposed, true),
-        filter((state) => state.transition !== null),
-        map((state) => state.transition!),
+        filter(
+          (state): state is RouteState & { transition: RunTransition } => state.transition !== null,
+        ),
+        map((state) => state.transition),
         switchMap((transition): Observable<ProducerWorkerEvent> => {
           switch (transition.kind) {
             case 'start':
@@ -147,7 +154,7 @@ export class ProducerController {
                   failedRunId: event.type === 'run-error' ? event.runId : state.failedRunId,
                   event,
                 },
-          { failedRunId: null, event: null } as EmissionState,
+          INITIAL_EMISSION_STATE,
         ),
         filter(
           (state): state is EmissionState & { event: ProducerWorkerEvent } => state.event !== null,
@@ -219,7 +226,7 @@ export class ProducerController {
       map((input) => MODE_FOR_CONTROL[input.command.type]),
       startWith('running' as const),
       distinctUntilChanged(),
-      map((mode, index): ActiveInput => ({ kind: 'mode', mode, initial: index === 0 })),
+      map((mode, index): ModeInput => ({ kind: 'mode', mode, initial: index === 0 })),
     );
 
     const initial: ActiveState = {
@@ -232,7 +239,7 @@ export class ProducerController {
     };
     return modes.pipe(
       switchMap((input) => {
-        if (input.kind !== 'mode' || input.mode === 'paused') return of(input);
+        if (input.mode === 'paused') return of(input);
         const batch = defer(() =>
           of(generator.generateBatch(command.settings.updatesPerBatch)),
         ).pipe(
@@ -378,9 +385,7 @@ function measurePace(previous: PaceState, now: number, intervalMs: number): Pace
   const late = now - previous.lastBatchAt > intervalMs * 2;
   const lateIntervals = late ? previous.lateIntervals + 1 : 0;
   const timelyIntervals = late ? 0 : previous.timelyIntervals + 1;
-  let slow = previous.slow;
-  if (lateIntervals >= 5) slow = true;
-  if (timelyIntervals >= 5) slow = false;
+  const slow = lateIntervals >= 5 || (previous.slow && timelyIntervals < 5);
 
   return { lastBatchAt: now, lateIntervals, timelyIntervals, slow };
 }

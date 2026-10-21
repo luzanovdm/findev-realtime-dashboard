@@ -46,11 +46,27 @@
   font: var(--tui-typography-body-s);
 }
 
+.form-feedback {
+  margin: 0;
+  color: var(--tui-text-positive);
+  font: var(--tui-typography-body-s);
+  font-weight: 700;
+}
+
+.form-warning {
+  color: var(--tui-text-negative);
+}
+
 .form-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+.form-note,
+.form-error {
+  flex-basis: 100%;
 }
 
 @media (max-width: 40rem) {

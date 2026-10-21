@@ -51,9 +51,10 @@ not rebuild AssemblyScript automatically.
 | `npm test`             | Run unit tests, then compiled Wasm and worker tests                  |
 | `npm run format`       | Format the project with Prettier                                     |
 | `npm run format:check` | Check project formatting                                             |
+| `npm run typecheck`    | Type-check app, worker, and tests with strict TypeScript             |
 | `npm run commit`       | Create a guided Conventional Commit                                  |
 | `npm run audit`        | Check dependencies for high-severity vulnerabilities                 |
-| `npm run check`        | Check formatting and run all available tests                         |
+| `npm run check`        | Check formatting, types, and all available tests                     |
 | `npm run perf:soak`    | Build and run a five-minute maximum-rate worker/accounting soak      |
 | `npm run clean`        | Remove generated `dist`, `.angular/cache`, and `public/wasm` files   |
 
@@ -92,7 +93,9 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
   icons, navigation buttons, and badges. Only the Latin font subset is bundled. The UI has no CDN
   dependencies.
 - Settings uses a validated Signal Forms draft. Edits stay local; Apply starts a new run and resets
-  the form after worker acknowledgement.
+  the form after worker acknowledgement. Accepted settings are saved in this browser, and the form
+  confirms whether the new run is live and whether storage succeeded. A reload starts a fresh run
+  with saved settings; malformed or unavailable storage falls back to defaults.
 - The dashboard renders five metrics per instrument with Decimal-only currency formatting, bigint
   volume grouping, producer status, and Pause/Resume controls. The table scrolls within the page at
   narrow widths.
@@ -103,7 +106,7 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - `assembly/index.ts` contains the stateful market-update generator. Its randomness, price walk,
   instrument selection, trades, and order-book quantities run in Wasm; compiled-module tests cover
   the ABI, batch sizes, invariants, deterministic seeds, state continuity, and memory stability.
-- `features/market-producer/producer.worker.ts` runs the generator and Decimal metric accumulator
+- `features/market-producer/generation/producer.worker.ts` runs the generator and Decimal metric accumulator
   through an application-run protocol. RxJS streams cancel superseded runs, fold Pause/Resume modes,
   pace batches, and report typed failures.
 - The application-scoped producer facade owns the worker across route navigation. It reduces

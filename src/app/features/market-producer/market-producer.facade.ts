@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { computed, DestroyRef, inject, Injectable } from '@angular/core';
+import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import {
   combineLatest,
@@ -18,7 +18,7 @@ import {
   timer,
 } from 'rxjs';
 import type { Observable } from 'rxjs';
-import { financialDecimal } from './financial-decimal';
+import { fromNullableDecimalString } from './metrics/financial-decimal';
 import type {
   InstrumentMetricSnapshot,
   ProducerError,
@@ -31,10 +31,12 @@ import {
   copyProducerSettings,
   DEFAULT_PRODUCER_SETTINGS,
   isProducerSettings,
+  sameProducerSettings,
 } from './producer-settings';
 import type { ProducerSettings } from './producer-settings';
-import { isProducerWorkerEvent } from './worker.protocol';
-import type { ProducerWorkerCommand, ProducerWorkerEvent } from './worker.protocol';
+import { ProducerSettingsStorage } from './producer-settings-storage';
+import { isProducerWorkerEvent } from './generation/worker.protocol';
+import type { ProducerWorkerCommand, ProducerWorkerEvent } from './generation/worker.protocol';
 
 const INITIALIZATION_DEADLINE_MS = 5_000;
 const COMMAND_DEADLINE_MS = 2_000;
@@ -93,6 +95,8 @@ const INITIAL_STATE: ProducerState = {
 export class MarketProducerFacade {
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly settingsStorage = inject(ProducerSettingsStorage);
+  private readonly settingsSaveState = signal<'saved' | 'unavailable' | null>(null);
   private readonly actions = new Subject<ProducerAction>();
   private readonly state$ = this.actions.pipe(
     scan(reduceProducerState, INITIAL_STATE),
@@ -109,6 +113,7 @@ export class MarketProducerFacade {
   readonly slow = computed(() => this.state().slow);
   readonly snapshotAt = computed(() => this.state().snapshotAt);
   readonly runId = computed(() => this.state().runId);
+  readonly settingsSaveStatus = this.settingsSaveState.asReadonly();
   readonly canPause = computed(
     () => this.status() === 'running' && this.state().pendingControl === null,
   );
@@ -190,7 +195,7 @@ export class MarketProducerFacade {
   start(): void {
     if (this.started || this.disposed) return;
     this.started = true;
-    this.beginRun(DEFAULT_PRODUCER_SETTINGS);
+    this.beginRun(this.settingsStorage.load() ?? DEFAULT_PRODUCER_SETTINGS);
   }
 
   pause(): void {
@@ -215,6 +220,7 @@ export class MarketProducerFacade {
     ) {
       return false;
     }
+    this.settingsSaveState.set(this.settingsStorage.save(settings) ? 'saved' : 'unavailable');
     this.beginRun(copyProducerSettings(settings));
     return true;
   }
@@ -259,7 +265,9 @@ export class MarketProducerFacade {
   private ensureWorker(): boolean {
     if (this.worker !== null) return true;
     try {
-      const worker = new Worker(new URL('./producer.worker', import.meta.url), { type: 'module' });
+      const worker = new Worker(new URL('./generation/producer.worker', import.meta.url), {
+        type: 'module',
+      });
       worker.onmessage = ({ data }: MessageEvent<unknown>) => this.receive(data);
       worker.onerror = () => this.actions.next({ type: 'failure', code: 'worker-crash' });
       worker.onmessageerror = () => this.actions.next({ type: 'failure', code: 'protocol' });
@@ -350,7 +358,7 @@ function reduceProducerState(state: ProducerState, action: ProducerAction): Prod
     case 'run-started':
       return !state.runAcknowledged &&
         state.status === 'initializing' &&
-        sameSettings(event.activeSettings, state.pendingSettings)
+        sameProducerSettings(event.activeSettings, state.pendingSettings)
         ? {
             ...state,
             runAcknowledged: true,
@@ -381,12 +389,18 @@ function reduceProducerState(state: ProducerState, action: ProducerAction): Prod
         state.status !== 'running' ||
         event.sequence <= state.lastSequence ||
         event.metrics.length !== state.activeSettings.instrumentCount ||
-        event.metrics.some(
-          (metric, index) =>
+        event.metrics.some((metric, index) => {
+          const previous = state.metrics[index];
+          return (
+            previous === undefined ||
             metric.instrument !== instrumentSymbol(index) ||
-            metric.volume < state.metrics[index].volume,
-        ) ||
-        !event.metrics.some((metric, index) => metric.volume > state.metrics[index].volume)
+            metric.volume < previous.volume
+          );
+        }) ||
+        !event.metrics.some((metric, index) => {
+          const previous = state.metrics[index];
+          return previous !== undefined && metric.volume > previous.volume;
+        })
       ) {
         return failedState(state, 'protocol');
       }
@@ -395,12 +409,11 @@ function reduceProducerState(state: ProducerState, action: ProducerAction): Prod
           ...state,
           metrics: event.metrics.map((metric) => ({
             instrument: metric.instrument,
-            lastPriceCents:
-              metric.lastPriceCents === null ? null : financialDecimal(metric.lastPriceCents),
-            spreadCents: metric.spreadCents === null ? null : financialDecimal(metric.spreadCents),
+            lastPriceCents: fromNullableDecimalString(metric.lastPriceCents),
+            spreadCents: fromNullableDecimalString(metric.spreadCents),
             volume: metric.volume,
-            vwapCents: metric.vwapCents === null ? null : financialDecimal(metric.vwapCents),
-            imbalance: metric.imbalance === null ? null : financialDecimal(metric.imbalance),
+            vwapCents: fromNullableDecimalString(metric.vwapCents),
+            imbalance: fromNullableDecimalString(metric.imbalance),
           })),
           lastSequence: event.sequence,
           snapshotAt: event.timestampMs,
@@ -430,12 +443,4 @@ function failedState(state: ProducerState, code: ProducerErrorCode): ProducerSta
     slow: false,
     pendingControl: null,
   };
-}
-
-function sameSettings(first: ProducerSettings, second: ProducerSettings): boolean {
-  return (
-    first.instrumentCount === second.instrumentCount &&
-    first.updatesPerBatch === second.updatesPerBatch &&
-    first.batchIntervalMs === second.batchIntervalMs
-  );
 }

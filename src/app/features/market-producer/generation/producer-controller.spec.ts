@@ -1,6 +1,6 @@
 import { VirtualTimeScheduler } from 'rxjs';
-import { financialDecimal } from './financial-decimal';
-import type { MarketUpdate } from './market-producer.types';
+import { financialDecimal } from '../metrics/financial-decimal';
+import type { MarketUpdate } from '../market-producer.types';
 import { ProducerController } from './producer-controller';
 import type { ProducerWorkerEvent } from './worker.protocol';
 import type { GeneratorPort } from './wasm-generator';
@@ -168,7 +168,7 @@ describe('ProducerController', () => {
     const h = harness();
     h.load.mockImplementation(() => new Promise<GeneratorPort>(() => {}));
     h.controller.dispatch(start(1));
-    const signal = h.load.mock.calls[0][1] as AbortSignal;
+    const signal = h.load.mock.calls[0][1];
     h.controller.dispatch({ type: 'pause', runId: 1 });
     expect(h.events.filter((event) => event.type === 'run-error')).toEqual([
       { type: 'run-error', runId: 1, code: 'protocol' },

@@ -1,12 +1,14 @@
 import type Decimal from 'decimal.js';
-import { FinancialDecimal, financialDecimal, toDecimalString } from './financial-decimal';
+import { FinancialDecimal, financialDecimal, toNullableDecimalString } from './financial-decimal';
+import { isRecord } from '../is-record';
 import type {
   InstrumentMetricSnapshot,
   MarketUpdate,
   SerializedInstrumentMetricSnapshot,
-} from './market-producer.types';
-import { instrumentSymbol } from './market-producer.types';
-import { ProducerFault } from './producer-error';
+} from '../market-producer.types';
+import { instrumentSymbol } from '../market-producer.types';
+import { ProducerFault } from '../producer-error';
+import { PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';
 
 interface InstrumentState {
   readonly lastPriceCents: Decimal | null;
@@ -36,8 +38,13 @@ export interface MetricState {
 }
 
 export function createMetricState(instrumentCount: number): MetricState {
-  if (!Number.isInteger(instrumentCount) || instrumentCount < 1 || instrumentCount > 50) {
-    throw new RangeError('Instrument count must be an integer from 1 to 50');
+  const { minimum, maximum } = PRODUCER_SETTING_CONSTRAINTS.instrumentCount;
+  if (
+    !Number.isInteger(instrumentCount) ||
+    instrumentCount < minimum ||
+    instrumentCount > maximum
+  ) {
+    throw new RangeError(`Instrument count must be an integer from ${minimum} to ${maximum}`);
   }
   return { instrumentCount, instruments: Array.from({ length: instrumentCount }, emptyState) };
 }
@@ -53,6 +60,7 @@ export function accumulateMetricBatch(
     for (const update of updates) {
       assertValidUpdate(update, state.instrumentCount);
       const current = instruments[update.instrumentIndex];
+      if (current === undefined) throw new ProducerFault('invalid-update');
       instruments[update.instrumentIndex] = {
         lastPriceCents: update.priceCents,
         bidCents: update.bidCents,
@@ -107,36 +115,40 @@ export function serializedMetricSnapshot(
 ): readonly SerializedInstrumentMetricSnapshot[] {
   return metricSnapshot(state).map((metric) => ({
     instrument: metric.instrument,
-    lastPriceCents: metric.lastPriceCents === null ? null : toDecimalString(metric.lastPriceCents),
-    spreadCents: metric.spreadCents === null ? null : toDecimalString(metric.spreadCents),
+    lastPriceCents: toNullableDecimalString(metric.lastPriceCents),
+    spreadCents: toNullableDecimalString(metric.spreadCents),
     volume: metric.volume,
-    vwapCents: metric.vwapCents === null ? null : toDecimalString(metric.vwapCents),
-    imbalance: metric.imbalance === null ? null : toDecimalString(metric.imbalance),
+    vwapCents: toNullableDecimalString(metric.vwapCents),
+    imbalance: toNullableDecimalString(metric.imbalance),
   }));
 }
 
 function assertValidUpdate(value: unknown, instrumentCount: number): asserts value is MarketUpdate {
-  if (typeof value !== 'object' || value === null) throw new ProducerFault('invalid-update');
-  const update = value as Partial<MarketUpdate>;
+  if (!isRecord(value)) {
+    throw new ProducerFault('invalid-update');
+  }
+  const update = value;
   if (
-    !Number.isInteger(update.instrumentIndex) ||
-    update.instrumentIndex! < 0 ||
-    update.instrumentIndex! >= instrumentCount ||
-    !(update.priceCents instanceof FinancialDecimal) ||
-    !(update.bidCents instanceof FinancialDecimal) ||
-    !(update.askCents instanceof FinancialDecimal) ||
-    !update.priceCents.isInteger() ||
-    !update.bidCents.isInteger() ||
-    !update.askCents.isInteger() ||
-    !update.bidCents.greaterThan(0) ||
-    !update.askCents.greaterThan(update.bidCents) ||
-    (!update.priceCents.equals(update.bidCents) && !update.priceCents.equals(update.askCents)) ||
-    typeof update.tradeQuantity !== 'bigint' ||
-    update.tradeQuantity <= 0n ||
-    typeof update.bidQuantity !== 'bigint' ||
-    update.bidQuantity < 0n ||
-    typeof update.askQuantity !== 'bigint' ||
-    update.askQuantity < 0n
+    typeof update['instrumentIndex'] !== 'number' ||
+    !Number.isInteger(update['instrumentIndex']) ||
+    update['instrumentIndex'] < 0 ||
+    update['instrumentIndex'] >= instrumentCount ||
+    !(update['priceCents'] instanceof FinancialDecimal) ||
+    !(update['bidCents'] instanceof FinancialDecimal) ||
+    !(update['askCents'] instanceof FinancialDecimal) ||
+    !update['priceCents'].isInteger() ||
+    !update['bidCents'].isInteger() ||
+    !update['askCents'].isInteger() ||
+    !update['bidCents'].greaterThan(0) ||
+    !update['askCents'].greaterThan(update['bidCents']) ||
+    (!update['priceCents'].equals(update['bidCents']) &&
+      !update['priceCents'].equals(update['askCents'])) ||
+    typeof update['tradeQuantity'] !== 'bigint' ||
+    update['tradeQuantity'] <= 0n ||
+    typeof update['bidQuantity'] !== 'bigint' ||
+    update['bidQuantity'] < 0n ||
+    typeof update['askQuantity'] !== 'bigint' ||
+    update['askQuantity'] < 0n
   ) {
     throw new ProducerFault('invalid-update', {
       expected: `a valid update for one of ${instrumentCount} instruments`,

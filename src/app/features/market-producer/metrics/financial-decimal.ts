@@ -25,6 +25,14 @@ export function toDecimalString(value: Decimal.Value): DecimalString {
   return (serialized === '-0' ? '0' : serialized) as DecimalString;
 }
 
+export function toNullableDecimalString(value: Decimal | null): DecimalString | null {
+  return value === null ? null : toDecimalString(value);
+}
+
+export function fromNullableDecimalString(value: DecimalString | null): Decimal | null {
+  return value === null ? null : financialDecimal(value);
+}
+
 export function isDecimalString(value: unknown): value is DecimalString {
   if (typeof value !== 'string' || !/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
     return false;

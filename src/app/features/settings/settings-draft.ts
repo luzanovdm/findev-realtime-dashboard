@@ -1,6 +1,7 @@
 import {
   PRODUCER_SETTING_CONSTRAINTS,
-  validateProducerSettings,
+  PRODUCER_SETTING_NAMES,
+  isProducerSettings,
 } from '../market-producer/producer-settings';
 import type { ProducerSettingName, ProducerSettings } from '../market-producer/producer-settings';
 
@@ -15,11 +16,7 @@ export function draftFromSettings(settings: ProducerSettings): SettingsDraft {
 }
 
 export function sameSettingsDraft(first: SettingsDraft, second: SettingsDraft): boolean {
-  return (
-    first.instrumentCount === second.instrumentCount &&
-    first.updatesPerBatch === second.updatesPerBatch &&
-    first.batchIntervalMs === second.batchIntervalMs
-  );
+  return PRODUCER_SETTING_NAMES.every((field) => first[field] === second[field]);
 }
 
 export function draftFieldError(field: ProducerSettingName, rawValue: string): string | null {
@@ -37,18 +34,11 @@ export function draftFieldError(field: ProducerSettingName, rawValue: string): s
 }
 
 export function parseSettingsDraft(draft: SettingsDraft): ProducerSettings | null {
-  if (
-    draftFieldError('instrumentCount', draft.instrumentCount) !== null ||
-    draftFieldError('updatesPerBatch', draft.updatesPerBatch) !== null ||
-    draftFieldError('batchIntervalMs', draft.batchIntervalMs) !== null
-  ) {
+  if (PRODUCER_SETTING_NAMES.some((field) => draftFieldError(field, draft[field]) !== null)) {
     return null;
   }
-
-  const settings = {
-    instrumentCount: Number(draft.instrumentCount.trim()),
-    updatesPerBatch: Number(draft.updatesPerBatch.trim()),
-    batchIntervalMs: Number(draft.batchIntervalMs.trim()),
-  };
-  return validateProducerSettings(settings).length === 0 ? settings : null;
+  const settings: unknown = Object.fromEntries(
+    PRODUCER_SETTING_NAMES.map((field) => [field, Number(draft[field].trim())]),
+  );
+  return isProducerSettings(settings) ? settings : null;
 }

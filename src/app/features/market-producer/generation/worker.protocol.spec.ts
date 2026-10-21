@@ -1,4 +1,4 @@
-import { DEFAULT_PRODUCER_SETTINGS } from './producer-settings';
+import { DEFAULT_PRODUCER_SETTINGS } from '../producer-settings';
 import { isProducerWorkerCommand, isProducerWorkerEvent } from './worker.protocol';
 
 describe('producer worker protocol', () => {

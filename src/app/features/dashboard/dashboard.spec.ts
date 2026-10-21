@@ -1,10 +1,11 @@
 import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTaiga } from '@taiga-ui/core';
-import { financialDecimal } from '../market-producer/financial-decimal';
+import { financialDecimal } from '../market-producer/metrics/financial-decimal';
 import { MarketProducerFacade } from '../market-producer/market-producer.facade';
 import type { InstrumentMetricSnapshot } from '../market-producer/market-producer.types';
 import { Dashboard } from './dashboard';
+import { requiredElement } from '../../testing/required-element';
 
 function fakeProducer() {
   const status = signal<'initializing' | 'running' | 'paused' | 'error'>('initializing');
@@ -59,9 +60,7 @@ describe('Dashboard', () => {
     );
     expect(cells).toEqual(['—', '—', '0', '—', '—']);
     expect(fixture.nativeElement.querySelector('tbody th')?.textContent).toBe('ASSET-01');
-    expect((fixture.nativeElement.querySelector('button') as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(requiredElement(fixture.nativeElement, 'button', HTMLButtonElement).disabled).toBe(true);
     expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
       'Initializing market data',
     );
@@ -70,7 +69,7 @@ describe('Dashboard', () => {
   it('renders the worked example from one confirmed snapshot', async () => {
     const producer = fakeProducer();
     const fixture = await createDashboard(producer);
-    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    const button = requiredElement(fixture.nativeElement, 'button', HTMLButtonElement);
     producer.metrics.set([
       {
         instrument: 'ASSET-01',
@@ -99,7 +98,7 @@ describe('Dashboard', () => {
     const producer = fakeProducer();
     producer.status.set('running');
     const fixture = await createDashboard(producer);
-    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    const button = requiredElement(fixture.nativeElement, 'button', HTMLButtonElement);
 
     button.click();
     await fixture.whenStable();
@@ -125,9 +124,7 @@ describe('Dashboard', () => {
     expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
       'Last confirmed values are outdated',
     );
-    expect((fixture.nativeElement.querySelector('button') as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(requiredElement(fixture.nativeElement, 'button', HTMLButtonElement).disabled).toBe(true);
     expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 

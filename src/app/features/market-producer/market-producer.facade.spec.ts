@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MarketProducerFacade } from './market-producer.facade';
 import { DEFAULT_PRODUCER_SETTINGS } from './producer-settings';
+import { isRecord } from './is-record';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -23,7 +24,7 @@ class FakeWorker {
   }
 
   emit(data: unknown): void {
-    this.onmessage?.({ data } as MessageEvent<unknown>);
+    this.onmessage?.(new MessageEvent('message', { data }));
   }
 }
 
@@ -56,6 +57,7 @@ function snapshot(runId = 1, count = 5) {
 
 describe('MarketProducerFacade', () => {
   beforeEach(() => {
+    localStorage.removeItem('findev.producer-settings.v1');
     FakeWorker.instances = [];
     FakeWorker.failConstruct = false;
     FakeWorker.failPost = false;
@@ -93,6 +95,35 @@ describe('MarketProducerFacade', () => {
     expect(facade.snapshotAt()).toBe(1000);
   });
 
+  it('starts a fresh run with valid settings restored after reload', () => {
+    localStorage.setItem(
+      'findev.producer-settings.v1',
+      JSON.stringify({
+        instrumentCount: 2,
+        updatesPerBatch: 10,
+        batchIntervalMs: 50,
+      }),
+    );
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    expect(FakeWorker.instances[0].commands[0]).toMatchObject({
+      type: 'start-run',
+      settings: { instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 },
+    });
+  });
+
+  it('saves accepted Apply settings while starting the replacement run', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    acknowledgedRun(FakeWorker.instances[0]);
+    const settings = { instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 };
+    expect(facade.apply(settings)).toBe(true);
+    expect(facade.settingsSaveStatus()).toBe('saved');
+    expect(JSON.parse(localStorage.getItem('findev.producer-settings.v1') ?? 'null')).toEqual(
+      settings,
+    );
+  });
+
   it('guards Pause and Resume commands and keeps the same worker', () => {
     const facade = TestBed.inject(MarketProducerFacade);
     facade.start();
@@ -101,13 +132,13 @@ describe('MarketProducerFacade', () => {
     facade.pause();
     facade.pause();
     expect(
-      worker.commands.filter((item) => (item as { type: string }).type === 'pause'),
+      worker.commands.filter((item) => isRecord(item) && item['type'] === 'pause'),
     ).toHaveLength(1);
     worker.emit({ type: 'status-changed', runId: 1, status: 'paused' });
     facade.resume();
     facade.resume();
     expect(
-      worker.commands.filter((item) => (item as { type: string }).type === 'resume'),
+      worker.commands.filter((item) => isRecord(item) && item['type'] === 'resume'),
     ).toHaveLength(1);
     worker.emit({ type: 'status-changed', runId: 1, status: 'running' });
     expect(facade.status()).toBe('running');

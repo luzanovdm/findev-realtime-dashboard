@@ -247,7 +247,8 @@ asynchronous behavior.
 
 1. Implement a root-provided facade and inject it eagerly from the app composition root.
 2. Construct exactly one module worker and resolve the Wasm URL from the document base URI.
-3. Start the default run once during application initialization.
+3. Start one run during application initialization, using defaults on the first visit or validated
+   browser-saved settings after a reload.
 4. Reduce validated events to one observable state and expose readonly signals for status, active
    settings, metrics, current run, and error.
 5. Implement `pause`, `resume`, and `apply` commands with allowed-state guards.
@@ -295,6 +296,10 @@ asynchronous behavior.
 8. After acknowledgement, reset draft, dirty, and submitted state to the accepted settings.
 9. If active settings change while the draft still equals the previously accepted values, refresh it.
    If the draft differs, preserve the user's edits until Apply or route exit.
+10. Save accepted settings to versioned browser storage on Apply. Validate stored values before reuse;
+    fall back to defaults if storage is malformed or unavailable. A reload creates a fresh run.
+11. Keep Apply disabled and labelled as pending until the run acknowledges success or failure. Show a
+    nearby status that distinguishes a live saved run from a live run whose settings could not persist.
 
 ### Tests
 
@@ -305,7 +310,8 @@ asynchronous behavior.
 - Apply resets prior metric state through the facade and starts a running producer, including when
   the previous run was paused.
 - Invalid submit sends nothing and exposes associated errors.
-- Tests act, await `fixture.whenStable()`, and assert without manual change-detection workarounds.
+- Browser storage failures and malformed saved values never crash startup or a valid Apply.
+- Tests await the run outcome and assert pending, success, failure, and storage-unavailable feedback.
 
 ### Acceptance gate
 

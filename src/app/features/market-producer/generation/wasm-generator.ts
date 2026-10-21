@@ -1,12 +1,13 @@
 import { catchError, defer, firstValueFrom, from, retry, switchMap, throwError, timer } from 'rxjs';
-import { financialDecimal } from './financial-decimal';
-import type { MarketUpdate } from './market-producer.types';
-import { ProducerFault } from './producer-error';
+import { financialDecimal } from '../metrics/financial-decimal';
+import type { MarketUpdate } from '../market-producer.types';
+import { ProducerFault } from '../producer-error';
+import { PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';
 
 const ABI_VERSION = 1;
 const RECORD_WIDTH = 7;
 const RECORD_BYTES = RECORD_WIDTH * Int32Array.BYTES_PER_ELEMENT;
-const MAX_BATCH_SIZE = 1_000;
+const MAX_BATCH_SIZE = PRODUCER_SETTING_CONSTRAINTS.updatesPerBatch.maximum;
 
 interface GeneratorExports {
   readonly memory: WebAssembly.Memory;
@@ -37,7 +38,7 @@ export class MarketGenerator implements GeneratorPort {
     if (
       !Number.isInteger(instrumentCount) ||
       instrumentCount < 1 ||
-      instrumentCount > 50 ||
+      instrumentCount > PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum ||
       !Number.isInteger(seed) ||
       seed < 1 ||
       seed > 0xffff_ffff
@@ -147,7 +148,7 @@ export async function loadMarketGenerator(
   if (typeof WebAssembly === 'undefined') throw new ProducerFault('worker-unavailable');
 
   const bytes = await firstValueFrom(
-    defer(() => from(fetch(url, { signal }))).pipe(
+    defer(() => from(fetch(url, { signal: signal ?? null }))).pipe(
       switchMap((response) => {
         if (!response.ok) {
           const retryable = response.status === 429 || response.status >= 500;

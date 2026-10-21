@@ -8,6 +8,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { routes } from './app.routes';
 import { AppErrorHandler } from './app-error';
+import { requiredElement } from './testing/required-element';
 
 describe('Application routing', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideRouter(routes)] }));
@@ -82,11 +83,11 @@ describe('Application shell', () => {
 
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
-    const alert = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement;
+    const alert = requiredElement(fixture.nativeElement, '[role="alert"]', HTMLElement);
     expect(alert.textContent).toContain('Market data could not be loaded');
     expect(fixture.nativeElement.querySelectorAll('nav a')).toHaveLength(2);
 
-    (alert.querySelector('button') as HTMLButtonElement).click();
+    requiredElement(alert, 'button', HTMLButtonElement).click();
     expect(producer.retry).toHaveBeenCalledTimes(1);
   });
 
@@ -113,7 +114,7 @@ describe('Application shell', () => {
     try {
       TestBed.inject(AppErrorHandler).handleError(new Error('private error detail'));
       await fixture.whenStable();
-      const alert = fixture.nativeElement.querySelector('.application-error') as HTMLElement;
+      const alert = requiredElement(fixture.nativeElement, '.application-error', HTMLElement);
       expect(alert.textContent).toContain('An unexpected interface error occurred');
       expect(alert.textContent).not.toContain('private error detail');
       expect(alert.querySelector('a')?.getAttribute('href')).toBe(document.baseURI);

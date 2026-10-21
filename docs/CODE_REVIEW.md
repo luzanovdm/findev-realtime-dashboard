@@ -4,7 +4,7 @@
 | --------------- | -------------------------------------------------------------------------------------------------- |
 | Scope           | Implementation against [TASK.md](../TASK.md) and the [implementation plan](IMPLEMENTATION_PLAN.md) |
 | Reviewed        | 2026-10-21                                                                                         |
-| Source baseline | `fe1f737`, `1b8652c`, and `d10f1b6`                                                                |
+| Source baseline | Current local review, including the settings and feature-structure revision                        |
 | Verification    | [Local verification](VERIFICATION.md)                                                              |
 
 ## Requirement and boundary review
@@ -58,9 +58,26 @@ state store. Worker transport validates values at runtime because TypeScript typ
 `postMessage` and the Wasm ABI. The accumulator and reducer are pure, while the Wasm instance alone
 owns mutable generator state.
 
+## Follow-up review: settings, strictness, and feature cohesion
+
+| Finding                                            | Change and verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Apply gave no completion feedback                  | The form now shows a pending label and disables repeated submission. Once the worker acknowledges a running run, a nearby `role="status"` message confirms both the live run and whether browser storage succeeded. A failed run keeps its draft and shows an actionable `role="alert"`. Both messages disappear when the draft changes. Component tests and a real-browser Apply confirm the states.                                                                                                                                                                                      |
+| Reload discarded accepted settings                 | The producer now reads and validates a versioned `localStorage` value before initial startup and saves accepted values on Apply. Missing, malformed, or inaccessible storage falls back to defaults without crashing. Reload starts a fresh run with saved settings; volume, snapshot, and Pause state are not persisted. Storage, facade, and browser-reload checks cover this.                                                                                                                                                                                                           |
+| Repeated field checks and hand-written comparisons | One constraints object defines the setting names, limits, and defaults. The draft form registers validators from those names, and draft/worker setting comparisons iterate the same keys. Typed construction of defaults and drafts still lists the three fields so adding a field produces a compile error where a complete value is required.                                                                                                                                                                                                                                            |
+| Flat producer directory                            | `generation/` owns the worker protocol, controller, and Wasm adapter; `metrics/` owns Decimal and accumulation. The facade, public contracts, settings policy, and error policy stay at the feature root. These are product sub-capabilities, not file-type buckets.                                                                                                                                                                                                                                                                                                                       |
+| Unsafe assertions and weak checks                  | Production, worker, and test code are type-checked by the locked quality command. Production enables `strict`, `strictTemplates`, `exactOptionalPropertyTypes`, and `noUncheckedIndexedAccess`. Indexing at the metric and snapshot boundaries now has explicit failure handling. Broad state and DOM assertions were replaced by typed initial states and runtime-checked test helpers. The remaining Decimal-string brand assertion follows canonical serialization, and `as const` preserves literal discriminants; `satisfies` cannot replace either without losing the intended type. |
+| Duplicate object guards                            | Settings validation, metric ingress, and worker protocol use one producer-owned `isRecord` guard.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+
+The table is capped at 50 rows by `TASK.md`. The current maximum-rate browser sample found no task
+over 50 ms in ten seconds and rendered all 50 semantic rows without page-width overflow. Virtual
+scrolling would remove offscreen rows from the native table and add a
+scrolling dependency. It is not justified by the measured workload; revisit if the row limit or a
+measured render cost rises. This decision does not claim every device will meet the same frame budget.
+
 ## Remaining limits and delivery gate
 
-The production initial bundle was 494.83 kB, close to the configured 500 kB warning threshold.
+The production initial bundle is about 495 kB, close to the configured 500 kB warning threshold.
 The maximum-rate browser and worker measurements passed on the tested machine, but a different device
 or future UI dependency growth may need another profile. Browser behavior has manual acceptance
 evidence; an automated end-to-end suite is outside the assignment's required tests.

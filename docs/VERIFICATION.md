@@ -6,6 +6,8 @@ dashboard presentation-only change is commit `1b8652c`; the snapshot-integrity f
 All passed the locked quality command on October 21, 2026. Native 200% zoom was verified on
 `1b8652c`; the earlier headless-browser profile
 used `e474e6b` before the controller change, so it is not a profile of the final code.
+The follow-up settings and feature-structure revision has a separate local check below; the older
+five-minute soak and native-zoom observations are not attributed to that revision.
 
 | Layer                      | Environment and input                                                                       | Result                                                                                                                                                                                                                                                                          |
 | -------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -22,6 +24,15 @@ used `e474e6b` before the controller change, so it is not a profile of the final
 | Navigation and Pause       | Headless Chrome 155, maximum settings                                                       | The first row's volume remained `1,813,392` while paused for 250 ms and after Dashboard → Settings → Dashboard navigation; the status remained paused.                                                                                                                          |
 | Unexpected interface error | Browser `ErrorEvent` injection and component test                                           | Fixed English recovery banner appeared without raw exception text; Reload cleared the error and restarted the dashboard.                                                                                                                                                        |
 | Local Pages emulation      | Wrangler 4.151.3 serving the production output                                              | Direct GETs to `/dashboard` and `/settings` returned `200 text/html`; the Wasm asset returned `200 application/wasm`. Both routes rendered live values in Headless Chrome. A missing Wasm path returned `200 text/html` via SPA fallback and was classified as a fetch failure. |
+
+The current local revision passed `npm run check`: formatting; strict TypeScript checks for the app,
+worker, and tests; 152 Angular/Vitest tests; eight compiled-Wasm and production-worker tests; and a
+production build. `npm run audit` reported zero vulnerabilities. In Headless Chrome, Apply showed a
+visible saved/live status, and a reload restored the values 50 / 1,000 / 50 and started a new running
+run. The maximum-rate dashboard displayed 50 semantic rows without horizontal page overflow. A new
+10-second foreground sample recorded zero `longtask` entries and 16.8 ms p95 animation-frame spacing
+over 601 frames. This sample does not replace the older five-minute accounting soak or native 200%
+zoom check.
 
 The soak validates accounting for the number of batches actually generated. The requested 50 ms
 interval is pacing between completed batches, so throughput may be below the nominal 20,000 updates

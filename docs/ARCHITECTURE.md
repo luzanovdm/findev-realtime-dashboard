@@ -75,11 +75,16 @@ src/app/
       market-producer.facade.ts public Angular facade; the feature's public entry point
       market-producer.types.ts status and metric snapshots
       producer-settings.ts     defaults, limits, and validation rules
-      producer.worker.ts
-      producer-controller.ts
-      worker.protocol.ts
-      wasm-generator.ts
-      metric-accumulator.ts
+      producer-settings-storage.ts browser-scoped accepted settings
+      producer-error.ts        failure policy and public error copy
+      generation/              worker execution and Wasm transport
+        producer.worker.ts
+        producer-controller.ts
+        worker.protocol.ts
+        wasm-generator.ts
+      metrics/                 exact financial accumulation
+        financial-decimal.ts
+        metric-accumulator.ts
     dashboard/                 observe and control the active run
       dashboard.ts
       market-metric-formatters.ts
@@ -89,9 +94,9 @@ assembly/
   index.ts                     stateful generator and binary ABI
 ```
 
-This is a target ownership map, not a requirement to create one file for every name immediately.
-Files remain flat inside a feature while the feature is small. A new directory is justified only
-when it represents a coherent sub-capability with several files.
+`generation` owns the asynchronous worker/Wasm boundary; `metrics` owns exact financial calculation.
+They are sub-capabilities of live market production, not generic type buckets. Public contracts and
+the facade remain at the feature root.
 
 Dependency rules:
 
@@ -135,7 +140,7 @@ every event carries it.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Initializing: app starts with defaults
+  [*] --> Initializing: defaults or saved accepted settings
   Initializing --> Running: Wasm initialized and run accepted
   Running --> Paused: Pause
   Paused --> Running: Resume
@@ -152,15 +157,18 @@ stateDiagram-v2
 
 Command semantics:
 
-- **Initial start:** use default settings, reset all generator and metric state, then generate the
-  first batch immediately after initialization.
+- **Initial start:** use defaults on the first visit, or validated browser-saved settings on a later
+  reload. Reset generator and metric state, then generate the first batch immediately after
+  initialization. A reload always starts a fresh run, not the previous running/paused state.
 - **Pause:** unsubscribe from pending generation and acknowledge `paused`; no batch may start after the
   acknowledgement.
 - **Resume:** preserve generator and accumulator state and schedule the next batch after one complete
   configured interval. Missed intervals are not replayed.
-- **Apply:** validate settings in Angular, increment `runId`, clear visible metrics, and send an
-  immutable settings snapshot. The worker cancels the prior run stream, resets Wasm and metrics, enters
-  `running`, and produces the first batch immediately. Apply always resumes a paused producer.
+- **Apply:** validate settings in Angular, save the accepted values in browser storage, increment
+  `runId`, clear visible metrics, and send an immutable settings snapshot. The worker cancels the
+  prior run stream, resets Wasm and metrics, enters `running`, and produces the first batch immediately.
+  Apply always resumes a paused producer. Browser storage failure does not stop a valid run; the form
+  explicitly explains that the values will reset on reload.
 - **Error:** stop scheduling. Only a fully validated, last confirmed snapshot may remain visible,
   marked stopped and stale. An integrity failure hides metrics. A valid Apply starts a new run.
 - **Teardown:** unsubscribe from generation, remove event handlers, and terminate the worker.
@@ -359,7 +367,10 @@ The Settings route uses Angular Signal Forms. A complete draft object is initial
 settings when the route opens. Fields require integers and the ranges from `TASK.md`. Editing changes
 only the draft. Apply submits an immutable validated copy; success resets the form to the accepted
 active values and starts a new run. Unsaved draft edits are route-local and may be discarded on
-navigation because the task requires active-run persistence, not draft persistence.
+navigation. Accepted settings persist in versioned browser storage; malformed or unavailable storage
+falls back to defaults without crashing. The task permits reload persistence to be omitted, while the
+product requirement now asks for it. Pause state and cumulative metrics are never restored after a
+reload.
 
 The Dashboard route renders semantic controls and a table. It distinguishes initialization, running,
 paused, and error states; keeps the last valid values visible while paused; and announces status and

@@ -23,7 +23,8 @@
     "commit": "commit",
     "commitlint": "commitlint",
     "audit": "npm audit --audit-level=high",
-    "check": "npm run format:check && npm test",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
+    "check": "npm run format:check && npm run typecheck && npm test",
     "prepare": "husky"
   },
   "private": true,

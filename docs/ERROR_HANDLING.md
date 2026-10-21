@@ -31,6 +31,7 @@ bootstrap failure where the browser still renders the document.
 | Level              | Meaning                                                                                       | Producer action                                                                  | User presentation                                                                    |
 | ------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Validation         | A settings draft is incomplete or outside the task's integer ranges                           | Do not send Apply; existing run continues                                        | Field-level message; no global error banner                                          |
+| Storage warning    | Accepted settings cannot be read from or saved to browser storage                             | Continue with defaults on load or run the valid Apply in memory                  | Nearby Apply status explains that settings will reset after reload                   |
 | Warning            | Output remains correct, but requested speed or browser scheduling differs from observed speed | Continue; never replay missed intervals                                          | Nonblocking status note after sustained deviation                                    |
 | Run error          | Generation cannot continue, but the last published snapshot is known valid                    | Cancel generation subscription; no automatic continuation of the same run        | Error banner, `Stopped` label and timestamp on retained rows, `Start new run` action |
 | Integrity critical | Current-run protocol, ABI, market record, or metric state cannot be trusted                   | Stop before applying or publishing the suspect batch; quarantine current metrics | Error banner, unavailable metrics, `Start new run` action                            |
@@ -71,8 +72,10 @@ The catalogue is deliberately finite. Unknown codes and malformed error events a
 
 ### Settings and Angular
 
-- Validate all three settings before sending Apply. Empty, non-number, non-finite, fractional, and
+- Validate every configured setting before sending Apply. Empty, non-number, non-finite, fractional, and
   out-of-range values stay in the draft with a specific field error.
+- Treat malformed stored data and storage-access exceptions as recoverable preference failures.
+  Neither may stop the worker or the interface. Save failure is visible after a successful Apply.
 - Facade methods guard allowed state and catch synchronous `Worker` construction and `postMessage`
   failures. Worker error and message-error events are converted into a current-run failure.
 - The facade accepts only validated events for its current `runId`. Older run events are discarded

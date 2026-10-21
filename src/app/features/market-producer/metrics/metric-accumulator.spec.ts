@@ -1,5 +1,5 @@
 import { financialDecimal } from './financial-decimal';
-import type { MarketUpdate } from './market-producer.types';
+import type { MarketUpdate } from '../market-producer.types';
 import {
   accumulateMetricBatch,
   createMetricState,

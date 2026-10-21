@@ -140,6 +140,10 @@ export async function loadMarketGenerator(
             () => new WasmFetchFault(retryable, new Error(`HTTP ${response.status}`)),
           );
         }
+        const contentType = response.headers?.get('content-type');
+        if (contentType && !/^application\/wasm(?:\s*;|$)/i.test(contentType)) {
+          return throwError(() => new WasmFetchFault(false, new Error('Unexpected content type')));
+        }
         return from(response.arrayBuffer());
       }),
       catchError((error: unknown) =>

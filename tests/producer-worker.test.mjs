@@ -37,6 +37,9 @@ test(
       } else if (request.url === '/invalid.wasm') {
         response.writeHead(200, { 'Content-Type': 'application/wasm' });
         response.end(Buffer.alloc(8));
+      } else if (request.url === '/fallback.wasm') {
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        response.end('<!doctype html><html></html>');
       } else {
         response.writeHead(404);
         response.end();
@@ -134,6 +137,16 @@ test(
     });
     const invalid = await waitFor((event) => event.type === 'run-error' && event.runId === 4);
     assert.equal(invalid.code, 'wasm-instantiate');
-    worker.postMessage({ type: 'dispose', runId: 4 });
+
+    worker.postMessage({
+      type: 'start-run',
+      runId: 5,
+      settings: firstSettings,
+      seed: 1,
+      wasmUrl: `${origin}/fallback.wasm`,
+    });
+    const fallback = await waitFor((event) => event.type === 'run-error' && event.runId === 5);
+    assert.equal(fallback.code, 'wasm-fetch');
+    worker.postMessage({ type: 'dispose', runId: 5 });
   },
 );

@@ -48,3 +48,6 @@ Thumbs.db
 
 # Playwright CLI session artifacts
 /.playwright-cli/
+
+# Cloudflare Pages local emulator artifacts
+/.wrangler/

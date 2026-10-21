@@ -79,6 +79,10 @@ The catalogue is deliberately finite. Unknown codes and malformed error events a
 
 ### Wasm loading and execution
 
+A static host may return the SPA HTML fallback with HTTP 200 for a missing `.wasm` URL. The loader
+checks a supplied response content type before instantiation and treats HTML as a non-retryable
+`wasm-fetch` failure.
+
 - Fetch errors, non-success HTTP status, compilation errors, missing exports, ABI mismatch, traps,
   and invalid pointers have distinct classifications.
 - The loader validates exports, memory, pointer alignment, record width, and bounds before reading.

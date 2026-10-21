@@ -13,10 +13,11 @@ The employer's original requirements are preserved in [TASK.md](TASK.md).
   toolchain, runtime, memory, and interoperability decision.
 - [Producer failure policy](docs/ERROR_HANDLING.md) defines severity, data trust, recovery, and
   user-visible errors.
+- [Local verification](docs/VERIFICATION.md) records the production-worker soak and browser checks.
 
 ## Environment and startup
 
-Node.js and npm are required. The tested local environment is Node **26.8.1** and npm
+Node.js and npm are required. The tested local environment is Node **24.21.0** and npm
 **11.19.0**. Compatible Node versions are listed in `package.json`; `.nvmrc` pins the tested
 version. All dependencies are local, and `package-lock.json` provides reproducible installs.
 Global Angular CLI, AssemblyScript, Rust, and other SDK installations are not required.
@@ -86,7 +87,8 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - Feature-first slices for the dashboard, settings, and market producer. Each feature owns its UI,
   contracts, and runtime code; the app shell contains only application composition and routing.
 - Taiga UI with `provideTaiga`, `tui-root`, the standard theme, local Manrope fonts, local SVG
-  icons, navigation buttons, and badges. The UI has no CDN dependencies.
+  icons, navigation buttons, and badges. Only the Latin font subset is bundled. The UI has no CDN
+  dependencies.
 - Settings uses a validated Signal Forms draft. Edits stay local; Apply starts a new run and resets
   the form after worker acknowledgement.
 - The dashboard renders five metrics per instrument with Decimal-only currency formatting, bigint
@@ -122,7 +124,8 @@ possible.
 
 `tests/wasm-abi.test.mjs` and `tests/wasm-generator.test.mjs` execute the compiled module directly.
 `tests/producer-worker.test.mjs` runs the production worker bundle with the compiled Wasm asset,
-including a maximum-size batch, Pause/Resume, reset, and missing-asset failure.
+including a maximum-size batch, Pause/Resume, reset, missing-asset failure, invalid Wasm, and an
+HTML SPA fallback for a missing Wasm path.
 The assignment's required unit scenarios are covered by the metric accumulator, settings draft and
 form, producer controller and facade, and compiled-generator test suites.
 
@@ -131,7 +134,8 @@ Automated end-to-end tests are not required by `TASK.md` and are not currently i
 
 ## Remaining implementation
 
-- Complete browser acceptance, performance and failure-path checks, and automatic deployment.
+- Connect the private repository to Cloudflare Pages, verify the first deployment, and then make the
+  repository and demo accessible to interviewers. No deployment has been started yet.
 
 The AssemblyScript generator uses fixed memory and a non-collecting stub runtime; compiled-Wasm tests
 check that repeated maximum-size generation does not grow memory. Worker commands and events are
@@ -168,6 +172,35 @@ The lockfile pins exact package versions. Run `npm ls --depth=0` to inspect the 
 
 ## Publishing status
 
-The GitHub repository is private. Hosting, automatic deployment, and deployment secrets are not
-configured yet. Section 5 of `TASK.md` describes the employer's submission requirements. When
-publishing, configure the SPA host to return `index.html` for application routes.
+The [GitHub repository](https://github.com/luzanovdm/findev-realtime-dashboard) is private and
+has not been updated with the local implementation commits. Cloudflare Pages is the selected host;
+the remote project and live demo do not exist yet. The local build includes `public/_headers` so the
+Wasm asset is served as `application/wasm` on Pages.
+
+When remote publication is authorized, connect the GitHub repository using Cloudflare Pages Git
+integration with these settings:
+
+| Setting             | Value                                    |
+| ------------------- | ---------------------------------------- |
+| Production branch   | `main`                                   |
+| Root directory      | Repository root                          |
+| Build command       | `npm ci && npm run check`                |
+| Build output        | `dist/findev-realtime-dashboard/browser` |
+| Build environment   | `SKIP_DEPENDENCY_INSTALL=1`              |
+| Node version        | `.nvmrc` (`24.21.0`)                     |
+| Build watch include | `*`                                      |
+| Build watch exclude | `docs/*`, `*.md`                         |
+
+`npm run check` creates the production build while running the worker/Wasm integration checks;
+Pages publishes that same build directory. Its default SPA routing serves `index.html` for direct
+`/dashboard` and `/settings` requests when there is no top-level `404.html`. The Pages project must
+be checked over HTTP for both routes and the Wasm response, then a later code push must be observed
+deploying automatically before the assignment is submitted. GitHub Actions remains manually
+dispatched during implementation and is not a substitute for a verified deployment.
+
+The hosting behavior and configuration above follow Cloudflare's
+[Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/),
+[build image](https://developers.cloudflare.com/pages/configuration/build-image/),
+[build watch paths](https://developers.cloudflare.com/pages/configuration/build-watch-paths/),
+[headers](https://developers.cloudflare.com/pages/configuration/headers/), and
+[SPA routing](https://developers.cloudflare.com/pages/configuration/serving-pages/) documentation.

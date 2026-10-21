@@ -98,6 +98,21 @@ describe('market generator adapter', () => {
     });
   });
 
+  it('classifies an HTML SPA fallback as a missing Wasm asset', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+        arrayBuffer: vi.fn(),
+      }),
+    );
+    await expect(loadMarketGenerator('/missing.wasm')).rejects.toMatchObject({
+      code: 'wasm-fetch',
+      retryable: false,
+    });
+  });
+
   it('rejects a module with missing ABI exports', async () => {
     vi.stubGlobal(
       'fetch',

@@ -31,8 +31,8 @@
             ],
             "styles": [
               "@taiga-ui/styles/taiga-ui-theme.less",
-              "@fontsource/manrope/500.css",
-              "@fontsource/manrope/800.css",
+              "@fontsource/manrope/latin-500.css",
+              "@fontsource/manrope/latin-800.css",
               "src/styles.css"
             ],
             "webWorkerTsConfig": "tsconfig.worker.json"

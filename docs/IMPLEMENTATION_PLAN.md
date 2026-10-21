@@ -2,7 +2,7 @@
 
 | Field               | Value                                                                 |
 | ------------------- | --------------------------------------------------------------------- |
-| Status              | Ready for implementation                                              |
+| Status              | Runtime and local acceptance complete; remote deployment pending      |
 | Owner               | Repository maintainer                                                 |
 | Version             | 1.0                                                                   |
 | Last reviewed       | 2026-10-21                                                            |
@@ -385,7 +385,8 @@ asynchronous behavior.
 2. Configure CI to block deployment when the complete quality command fails.
 3. Build once and publish the tested artifact rather than rebuilding with different inputs in an
    opaque deployment step where the provider permits it.
-4. Add deployment concurrency so a superseded build cannot overwrite a newer successful deployment.
+4. Check the live commit after overlapping or consecutive pushes; confirm the provider does not
+   leave a superseded build serving as the latest production version.
 5. Document repository URL, live demo URL, Node/npm prerequisites, all commands, architecture links,
    known limits, and the selected hosting flow in `README.md`.
 6. Make the repository public only when it and the live demo are ready for reviewer access.

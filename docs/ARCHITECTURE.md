@@ -427,9 +427,13 @@ Angular bundle, one worker bundle, and the version-matched Wasm file. The deploy
 5. return `index.html` for `/dashboard` and `/settings` navigation;
 6. redeploy automatically on every push to the deployment branch.
 
-The hosting provider is intentionally deferred until the runtime is complete. It will be selected by
-an implementation-stage decision based on private-repository support, SPA rewrites, Wasm MIME type,
-preview behavior, and the requirement to make the final repository and demo accessible to reviewers.
+Cloudflare Pages is selected for Git-integrated automatic deployments from the private GitHub
+repository. Pages supports private repositories, default SPA fallback without a top-level `404.html`,
+and `_headers` rules; the build includes an explicit `application/wasm` rule. The Pages build command
+will run `npm ci && npm run check` with automatic dependency installation disabled, then publish
+`dist/findev-realtime-dashboard/browser/`. Wrangler's local Pages emulator served both direct routes
+and the Wasm asset correctly; the eventual remote project must be checked independently. Remote
+connection and push-to-live verification remain pending while pushes are withheld.
 
 ## 13. Verification strategy
 
@@ -466,3 +470,6 @@ These are bounded checks, not unresolved architecture ownership:
 - [AssemblyScript: Compiler and module boundary](https://www.assemblyscript.org/compiler.html)
 - [WebAssembly: JavaScript API and linear memory](https://webassembly.org/getting-started/js-api/)
 - [`decimal.js`: arbitrary-precision decimal arithmetic](https://github.com/MikeMcl/decimal.js)
+- [Cloudflare Pages: Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/)
+- [Cloudflare Pages: SPA routing](https://developers.cloudflare.com/pages/configuration/serving-pages/)
+- [Cloudflare Pages: custom headers](https://developers.cloudflare.com/pages/configuration/headers/)

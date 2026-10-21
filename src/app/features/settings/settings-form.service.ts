@@ -90,11 +90,11 @@ export class SettingsFormService {
 
   private async applySettings(): Promise<{ kind: 'apply-error'; message: string } | undefined> {
     this.feedback.set(null);
-    const settings = parseSettingsDraft(this.draft());
+    const submittedDraft = this.draft();
+    const settings = parseSettingsDraft(submittedDraft);
     if (settings === null) {
       return { kind: 'apply-error', message: 'Settings could not be applied. Check the fields.' };
     }
-    const submittedDraft = draftFromSettings(settings);
     if (!this.producer.apply(settings)) {
       return {
         kind: 'apply-error',
@@ -118,14 +118,14 @@ export class SettingsFormService {
         };
       }
 
-      this.feedback.set({
-        runId,
-        draft: submittedDraft,
-        warning: saveStatus === SettingsSaveStatus.Unavailable,
-        message: copy.success,
-      });
       if (sameSettingsDraft(this.draft(), submittedDraft)) {
         this.settingsForm().reset(draftFromSettings(this.producer.activeSettings()));
+        this.feedback.set({
+          runId,
+          draft: this.draft(),
+          warning: saveStatus === SettingsSaveStatus.Unavailable,
+          message: copy.success,
+        });
       }
     } catch {
       if (!this.destroyRef.destroyed) {

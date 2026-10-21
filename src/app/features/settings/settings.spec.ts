@@ -141,6 +141,46 @@ describe('Settings form', () => {
     expect(fixture.nativeElement.querySelector('[role="status"]')).toBeNull();
   });
 
+  it('confirms a valid noncanonical draft and normalizes it after acknowledgement', async () => {
+    const producer = fakeProducer();
+    const fixture = await createSettings(producer);
+    edit(fixture, 'instrument-count', '05');
+    await fixture.whenStable();
+    submitForm(fixture);
+    await fixture.whenStable();
+    expect(producer.apply).toHaveBeenCalledExactlyOnceWith(DEFAULT_PRODUCER_SETTINGS);
+
+    producer.activeSettings.set({ ...DEFAULT_PRODUCER_SETTINGS });
+    producer.status.set('running');
+    producer.outcomes.next('running');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.form.draft().instrumentCount).toBe('5');
+    expect(fixture.componentInstance.form.settingsForm().dirty()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'Saved in this browser',
+    );
+  });
+
+  it('does not replace edits made while a submitted run is starting', async () => {
+    const producer = fakeProducer();
+    const fixture = await createSettings(producer);
+    edit(fixture, 'instrument-count', '05');
+    await fixture.whenStable();
+    submitForm(fixture);
+    await fixture.whenStable();
+    edit(fixture, 'instrument-count', '3');
+    await fixture.whenStable();
+
+    producer.activeSettings.set({ ...DEFAULT_PRODUCER_SETTINGS });
+    producer.status.set('running');
+    producer.outcomes.next('running');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.form.draft().instrumentCount).toBe('3');
+    expect(fixture.nativeElement.querySelector('[role="status"]')).toBeNull();
+  });
+
   it('preserves an unsaved dirty draft when accepted settings change elsewhere', async () => {
     const producer = fakeProducer();
     const fixture = await createSettings(producer);

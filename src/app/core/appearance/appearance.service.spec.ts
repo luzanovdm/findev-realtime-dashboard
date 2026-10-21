@@ -53,4 +53,18 @@ describe('appearance preference', () => {
     expect(appearance.preference()).toBe(ThemePreference.Dark);
     expect(TestBed.inject(TUI_DARK_MODE)()).toBe(true);
   });
+
+  it('clears an invalid saved preference and restores system tracking', () => {
+    systemDark = true;
+    localStorage.setItem(TUI_DARK_MODE_DEFAULT_KEY, 'corrupt');
+
+    const appearance = TestBed.inject(AppearanceService);
+    expect(appearance.preference()).toBe(ThemePreference.System);
+    expect(localStorage.getItem(TUI_DARK_MODE_DEFAULT_KEY)).toBeNull();
+    expect(TestBed.inject(TUI_DARK_MODE)()).toBe(true);
+
+    systemDark = false;
+    media.dispatchEvent(new Event('change'));
+    expect(TestBed.inject(TUI_DARK_MODE)()).toBe(false);
+  });
 });

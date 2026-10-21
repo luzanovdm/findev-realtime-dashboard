@@ -3,6 +3,15 @@
 **This is a starter project for completing the coding assignment, not a finished solution.**
 The employer's original requirements are preserved in [TASK.md](TASK.md).
 
+## Architecture and implementation plan
+
+- [Architecture](docs/ARCHITECTURE.md) defines feature ownership, runtime boundaries, the Wasm ABI,
+  worker lifecycle, metric state, performance budgets, and verification strategy.
+- [Implementation plan](docs/IMPLEMENTATION_PLAN.md) turns every assignment requirement into phased
+  work with tests and acceptance gates.
+- [ADR-0001](docs/decisions/0001-use-assemblyscript-for-market-generator.md) records the Wasm language,
+  toolchain, runtime, memory, and interoperability decision.
+
 ## Environment and startup
 
 Node.js and npm are required. The tested local environment is Node **26.8.1** and npm

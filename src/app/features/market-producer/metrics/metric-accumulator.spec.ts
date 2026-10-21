@@ -1,4 +1,4 @@
-import { financialDecimal } from './financial-decimal';
+import { financialDecimal } from '../../../core/money/financial-decimal';
 import type { MarketUpdate } from '../market-producer.types';
 import {
   accumulateMetricBatch,

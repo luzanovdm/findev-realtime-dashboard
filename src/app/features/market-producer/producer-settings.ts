@@ -1,4 +1,4 @@
-import { isRecord } from '../../shared/is-record';
+import { isRecord } from '../../core/validation/is-record';
 
 export interface ProducerSettingConstraint {
   readonly minimum: number;

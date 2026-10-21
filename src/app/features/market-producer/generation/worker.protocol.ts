@@ -3,8 +3,8 @@ import type {
   ProducerStatus,
   SerializedInstrumentMetricSnapshot,
 } from '../market-producer.types';
-import { isRecord } from '../../../shared/is-record';
-import { financialDecimal, isDecimalString } from '../metrics/financial-decimal';
+import { financialDecimal, isDecimalString } from '../../../core/money/financial-decimal';
+import { isRecord } from '../../../core/validation/is-record';
 import { isProducerErrorCode } from '../producer-error';
 import { isProducerSettings, PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';
 import type { ProducerSettings } from '../producer-settings';

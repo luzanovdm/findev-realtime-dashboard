@@ -1,0 +1,29 @@
+<div class="table-scroll" role="region" aria-label="Instrument metrics" tabindex="0">
+  <table>
+    <caption>
+      Current run instruments
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col">Instrument</th>
+        <th scope="col">Last price</th>
+        <th scope="col">Bid–ask spread</th>
+        <th scope="col">Trading volume</th>
+        <th scope="col">VWAP</th>
+        <th scope="col">Order-book imbalance</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (metric of metrics(); track metric.instrument) {
+        <tr>
+          <th scope="row">{{ metric.instrument }}</th>
+          <td>{{ metric.lastPriceCents | usdCents }}</td>
+          <td>{{ metric.spreadCents | usdCents }}</td>
+          <td>{{ metric.volume | volume }}</td>
+          <td>{{ metric.vwapCents | usdCents }}</td>
+          <td>{{ metric.imbalance | imbalance }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

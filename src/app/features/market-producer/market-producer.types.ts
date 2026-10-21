@@ -1,5 +1,5 @@
 import type Decimal from 'decimal.js';
-import type { DecimalString } from './metrics/financial-decimal';
+import type { DecimalString } from '../../core/money/financial-decimal';
 import { PRODUCER_SETTING_CONSTRAINTS } from './producer-settings';
 
 export type ProducerStatus = 'initializing' | 'running' | 'paused' | 'error';

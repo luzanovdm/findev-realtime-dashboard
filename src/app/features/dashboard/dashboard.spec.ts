@@ -1,7 +1,7 @@
 import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTaiga } from '@taiga-ui/core';
-import { financialDecimal } from '../market-producer/metrics/financial-decimal';
+import { financialDecimal } from '../../core/money/financial-decimal';
 import { MarketProducerFacade } from '../market-producer/market-producer.facade';
 import type { InstrumentMetricSnapshot } from '../market-producer/market-producer.types';
 import { Dashboard } from './dashboard';

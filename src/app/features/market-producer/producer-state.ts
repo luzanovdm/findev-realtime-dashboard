@@ -1,5 +1,5 @@
 import { match } from 'ts-pattern';
-import { fromNullableDecimalString } from './metrics/financial-decimal';
+import { fromNullableDecimalString } from '../../core/money/financial-decimal';
 import { instrumentSymbol } from './market-producer.types';
 import type {
   InstrumentMetricSnapshot,

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MarketProducerFacade } from './market-producer.facade';
 import { DEFAULT_PRODUCER_SETTINGS } from './producer-settings';
-import { isRecord } from '../../shared/is-record';
+import { isRecord } from '../../core/validation/is-record';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];

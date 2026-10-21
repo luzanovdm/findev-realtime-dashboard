@@ -1,5 +1,5 @@
 import { VirtualTimeScheduler } from 'rxjs';
-import { financialDecimal } from '../metrics/financial-decimal';
+import { financialDecimal } from '../../../core/money/financial-decimal';
 import type { MarketUpdate } from '../market-producer.types';
 import { ProducerController } from './producer-controller';
 import type { ProducerWorkerEvent } from './worker.protocol';

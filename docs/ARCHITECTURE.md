@@ -26,8 +26,8 @@ without blocking Angular, and keep one active run across route changes. The arch
 4. **Responsiveness.** The maximum configured nominal rate is 20,000 updates per second.
 5. **Explainability.** The implementation must remain small enough to discuss and modify during an
    interview.
-6. **Feature ownership.** Code is grouped by product capability, with no generic `core`, `models`,
-   `services`, or `utils` buckets.
+6. **Feature ownership.** Product behavior stays inside feature slices. Application-wide financial
+   precision, numeric presentation, and runtime validation live in purpose-named `core` modules.
 
 Evidence labels used below:
 
@@ -70,8 +70,15 @@ src/app/
   app.ts                       application composition and eager producer startup
   app-error.ts                 application-wide unexpected-error fallback
   app.routes.ts                route composition
-  shared/
-    is-record.ts               domain-neutral runtime object guard
+  core/
+    money/
+      financial-decimal.ts     exact Decimal construction and worker serialization
+      format-usd-cents.ts      USD display formatting without changing stored precision
+      usd-cents.pipe.ts        reusable Angular currency presentation
+    numbers/
+      group-digits.ts          digit grouping for money and bigint volume
+    validation/
+      is-record.ts             runtime object guard at untyped boundaries
   features/
     market-producer/           live-market production capability
       market-producer.facade.ts public Angular facade; the feature's public entry point
@@ -86,39 +93,40 @@ src/app/
         worker.protocol.ts
         wasm-generator.ts
       metrics/                 exact financial accumulation
-        financial-decimal.ts
         metric-accumulator.ts
     dashboard/                 observe and control the active run
       dashboard.ts
-      market-metric-formatters.ts
-      currency-cents.pipe.ts
-      volume.pipe.ts
-      imbalance.pipe.ts
+      instrument-table/        table-specific metric presentation
+        instrument-table.ts
+        instrument-table.html
+        instrument-table.css
+        market-metric-formatters.ts
+        volume.pipe.ts
+        imbalance.pipe.ts
     settings/                  edit and apply a new producer run
       settings.ts
 assembly/
   index.ts                     stateful generator and binary ABI
 ```
 
-`generation` owns the asynchronous worker/Wasm boundary; `metrics` owns exact financial calculation.
-They are sub-capabilities of live market production, not generic type buckets. Public contracts and
-the facade remain at the feature root.
+`generation` owns the asynchronous worker/Wasm boundary; `metrics` owns cumulative market
+calculation; `instrument-table` owns the table component, its styling, and metric presentation.
+They are product sub-capabilities. Public contracts and the facade remain at the market-producer
+feature root. `core/money` owns the exact Decimal policy and reusable USD presentation, while
+`core/numbers` and `core/validation` contain small policies used across runtime boundaries.
 
 Dependency rules:
 
-- `dashboard` and `settings` depend only on the public facade and public contracts of
-  `market-producer`.
+- `dashboard` and `settings` access the producer only through its public facade and contracts.
+- Features may import purpose-named `core` modules directly; `core` never imports a feature.
 - `dashboard` does not calculate cumulative metrics.
 - `settings` owns draft form state; it does not own the active producer settings.
 - Worker-only modules do not import Angular or DOM APIs.
 - `app` composes features and routes; it contains no market rules.
 - `assembly` is a separate compilation boundary and cannot import application TypeScript.
 - Cross-feature imports never reach private worker or Wasm adapter files.
-- `shared` contains only domain-neutral primitives used across boundaries; market rules stay in their
-  owning feature.
-
-No `core` directory is planned. If a genuinely application-wide policy appears later, its name must
-describe that policy rather than its technical type.
+- Market-specific rules, worker scheduling, and metric accumulation remain in their owning feature.
+  `core` contains neither generic feature facades nor type-based `models` or `services` buckets.
 
 ## 4. Runtime ownership
 

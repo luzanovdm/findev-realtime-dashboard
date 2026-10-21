@@ -2,9 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { TuiButton } from '@taiga-ui/core';
 import { MarketProducerFacade } from '../market-producer/market-producer.facade';
 import type { ProducerStatus } from '../market-producer/market-producer.types';
-import { CurrencyCentsPipe } from './currency-cents.pipe';
-import { ImbalancePipe } from './imbalance.pipe';
-import { VolumePipe } from './volume.pipe';
+import { InstrumentTable } from './instrument-table/instrument-table';
 
 const STATUS_PRESENTATION = {
   initializing: { message: 'Initializing market data…', controlLabel: 'Pause' },
@@ -18,7 +16,7 @@ const STATUS_PRESENTATION = {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [TuiButton, CurrencyCentsPipe, ImbalancePipe, VolumePipe],
+  imports: [TuiButton, InstrumentTable],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

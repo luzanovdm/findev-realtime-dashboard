@@ -34,11 +34,11 @@ run. The maximum-rate dashboard displayed 50 semantic rows without horizontal pa
 over 601 frames. This sample does not replace the older five-minute accounting soak or native 200%
 zoom check.
 
-The current protocol, state-transition, and form refactor passed `npm run check`: formatting, strict
+The current protocol, state-transition, form, and purpose-named core layout passed `npm run check`: formatting, strict
 application/worker/spec TypeScript checks, 156 Angular/Vitest tests, eight compiled-Wasm and
 production-worker tests, and a production build. `npm run audit` reported zero vulnerabilities. The
-initial bundle is 501.98 kB raw (117.36 kB estimated transfer), within the reviewed 510 kB warning
-budget; the 1 MB error budget is unchanged. A new five-minute
+initial bundle is 502.57 kB raw (117.51 kB estimated transfer), within the reviewed 510 kB warning
+budget; the 1 MB error budget is unchanged. Before the source relocation, a five-minute
 built-worker soak with 50 instruments, 1,000 updates per batch, and a requested 50 ms interval
 processed 5,370 batches and accounted for all 5,370,000 updates against deterministic compiled-Wasm
 replay. It emitted 2,685 running snapshots (8.95 Hz), with a shortest worker timestamp interval of
@@ -47,8 +47,12 @@ replay. It emitted 2,685 running snapshots (8.95 Hz), with a shortest worker tim
 prove the absence of all leaks. In a local browser, Apply showed saved/live feedback, the 50-row
 dashboard displayed formatted currency, volume, and imbalance values, and a reload restored the
 accepted 50 / 1,000 / 50 settings; no browser-console errors were observed. The later form teardown
-and feedback-lifetime edits were covered by unit tests and the final locked quality command; the
-browser observation precedes only those form edits.
+and feedback-lifetime edits and the later source relocation were covered by unit tests and the final
+locked quality command. After extracting the instrument-table component, the local browser applied
+the maximum 50 / 1,000 / 50 settings, showed saved/live feedback, and rendered 50 rows with formatted
+values. At a 320 px viewport, document width stayed 320 px while the 755 px table scrolled inside its
+286 px region; the browser console recorded no errors. The earlier reload observation precedes the
+form and source-layout edits; current storage and form behavior also passed unit tests.
 
 The soak validates accounting for the number of batches actually generated. The requested 50 ms
 interval is pacing between completed batches, so throughput may be below the nominal 20,000 updates

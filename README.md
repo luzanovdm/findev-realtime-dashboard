@@ -88,7 +88,8 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - Angular standalone components with strict TypeScript and two lazy routes: `/dashboard` and
   `/settings`.
 - Feature-first slices for the dashboard, settings, and market producer. Each feature owns its UI,
-  contracts, and runtime code; the app shell contains only application composition and routing.
+  contracts, and runtime code; purpose-named `core/money`, `core/numbers`, and `core/validation`
+  hold reusable financial and boundary primitives. The app shell contains only composition and routing.
 - Taiga UI with `provideTaiga`, `tui-root`, the standard theme, local Manrope fonts, local SVG
   icons, navigation buttons, and badges. Only the Latin font subset is bundled. The UI has no CDN
   dependencies.

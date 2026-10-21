@@ -1,5 +1,5 @@
 import { catchError, defer, firstValueFrom, from, retry, switchMap, throwError, timer } from 'rxjs';
-import { financialDecimal } from '../metrics/financial-decimal';
+import { financialDecimal } from '../../../core/money/financial-decimal';
 import type { MarketUpdate } from '../market-producer.types';
 import { ProducerFault } from '../producer-error';
 import { PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';

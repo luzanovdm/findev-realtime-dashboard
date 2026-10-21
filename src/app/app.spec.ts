@@ -10,6 +10,8 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { routes } from './app.routes';
 import { AppErrorHandler } from './app-error';
 import { requiredElement } from './testing/required-element';
+import { financialDecimal } from './core/money/financial-decimal';
+import { DEFAULT_PRODUCER_SETTINGS } from './features/market-producer/producer-settings';
 
 describe('Application routing', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideRouter(routes)] }));
@@ -24,6 +26,46 @@ describe('Application routing', () => {
     expect(harness.routeNativeElement?.querySelector('h1')?.textContent).toBe('Settings');
     await harness.navigateByUrl('/dashboard');
     expect(harness.routeNativeElement?.querySelector('h1')?.textContent).toBe('Dashboard');
+  });
+
+  it('preserves the same paused producer state across route destruction', async () => {
+    const producer = {
+      activeSettings: signal(DEFAULT_PRODUCER_SETTINGS),
+      status: signal<'paused' | 'running'>('paused'),
+      metrics: signal([
+        {
+          instrument: 'ASSET-01',
+          lastPriceCents: financialDecimal(10200),
+          spreadCents: financialDecimal(4),
+          volume: 42n,
+          vwapCents: financialDecimal(10150),
+          imbalance: financialDecimal('0.2'),
+        },
+      ]),
+      stale: signal(false),
+      slow: signal(false),
+      error: signal(null),
+      canPause: signal(false),
+      canResume: signal(true),
+    };
+    TestBed.overrideProvider(MarketProducerFacade, { useValue: producer });
+
+    const harness = await RouterTestingHarness.create('/dashboard');
+    expect(harness.routeNativeElement?.querySelector('tbody tr')?.textContent).toContain('42');
+    expect(harness.routeNativeElement?.querySelector('[role="status"]')?.textContent).toContain(
+      'Updates paused',
+    );
+
+    await harness.navigateByUrl('/settings');
+    expect(
+      harness.routeNativeElement?.querySelector<HTMLInputElement>('#instrument-count')?.value,
+    ).toBe('5');
+    await harness.navigateByUrl('/dashboard');
+    expect(harness.routeNativeElement?.querySelector('tbody tr')?.textContent).toContain('42');
+    expect(harness.routeNativeElement?.querySelector('[role="status"]')?.textContent).toContain(
+      'Updates paused',
+    );
+    expect(TestBed.inject(MarketProducerFacade)).toBe(producer);
   });
 });
 

@@ -1,10 +1,10 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
+
+# Automatic triggers are paused during implementation. When restoring them,
+# exclude docs/** and **/*.md so documentation-only changes never start CI.
 
 permissions:
   contents: read

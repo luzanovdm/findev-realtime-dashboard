@@ -74,9 +74,9 @@ feat(dashboard): add cumulative volume metrics
 ```
 
 The pre-commit hook formats staged files with Prettier, the commit-msg hook validates the message,
-and the pre-push hook runs the complete project check. GitHub Actions repeats the complete check and
-dependency audit for pushes and pull requests. Dependabot checks npm and GitHub Actions updates
-weekly.
+and the pre-push hook runs the complete project check. The GitHub Actions quality workflow currently
+runs only when manually dispatched. Automatic triggers will return before submission, excluding
+documentation-only changes. Dependabot checks npm and GitHub Actions updates weekly.
 
 ## Prepared scaffold
 

@@ -26,6 +26,8 @@ interface InstrumentState {
   readonly notionalCents: Decimal;
 }
 
+type BatchInstrumentState = { -readonly [Key in keyof InstrumentState]: InstrumentState[Key] };
+
 function emptyState(): InstrumentState {
   return {
     lastPriceCents: null,
@@ -57,29 +59,37 @@ export function accumulateMetricBatch(
 ): MetricState {
   if (!Array.isArray(updates)) throw new ProducerFault(ProducerErrorCode.InvalidUpdate);
 
-  const instruments = [...state.instruments];
+  const staged: (BatchInstrumentState | undefined)[] = Array(state.instrumentCount);
   try {
     for (const update of updates) {
       assertValidUpdate(update, state.instrumentCount);
-      const current = instruments[update.instrumentIndex];
-      if (current === undefined) throw new ProducerFault(ProducerErrorCode.InvalidUpdate);
-      instruments[update.instrumentIndex] = {
-        lastPriceCents: update.priceCents,
-        bidCents: update.bidCents,
-        askCents: update.askCents,
-        bidQuantity: update.bidQuantity,
-        askQuantity: update.askQuantity,
-        volume: current.volume + update.tradeQuantity,
-        notionalCents: current.notionalCents.plus(
-          update.priceCents.times(update.tradeQuantity.toString()),
-        ),
-      };
+      const index = update.instrumentIndex;
+      let current = staged[index];
+      if (current === undefined) {
+        const previous = state.instruments[index];
+        if (previous === undefined) throw new ProducerFault(ProducerErrorCode.InvalidUpdate);
+        current = { ...previous };
+        staged[index] = current;
+      }
+      current.lastPriceCents = update.priceCents;
+      current.bidCents = update.bidCents;
+      current.askCents = update.askCents;
+      current.bidQuantity = update.bidQuantity;
+      current.askQuantity = update.askQuantity;
+      current.volume += update.tradeQuantity;
+      current.notionalCents = current.notionalCents.plus(
+        update.priceCents.times(update.tradeQuantity.toString()),
+      );
     }
   } catch (error: unknown) {
     if (error instanceof ProducerFault) throw error;
     throw new ProducerFault(ProducerErrorCode.MetricFailure, error);
   }
 
+  const instruments = [...state.instruments];
+  staged.forEach((instrument, index) => {
+    if (instrument !== undefined) instruments[index] = instrument;
+  });
   return { ...state, instruments };
 }
 

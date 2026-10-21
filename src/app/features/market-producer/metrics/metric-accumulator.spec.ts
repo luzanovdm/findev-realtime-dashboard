@@ -78,6 +78,21 @@ describe('metric accumulation', () => {
     expect(second.imbalance?.toFixed()).toBe('1');
   });
 
+  it('updates only touched instruments without mutating a confirmed batch', () => {
+    const first = accumulateMetricBatch(createMetricState(2), [
+      update(0, '100', 1n, '100', '101', 1n, 1n),
+    ]);
+    const second = accumulateMetricBatch(first, [
+      update(0, '101', 2n, '100', '101', 1n, 1n),
+      update(0, '100', 3n, '100', '101', 1n, 1n),
+    ]);
+
+    expect(metricSnapshot(first)[0].volume).toBe(1n);
+    expect(metricSnapshot(second)[0].volume).toBe(6n);
+    expect(second.instruments[0]).not.toBe(first.instruments[0]);
+    expect(second.instruments[1]).toBe(first.instruments[1]);
+  });
+
   it('keeps notional arithmetic exact beyond binary floating-point integer precision', () => {
     const state = accumulateMetricBatch(createMetricState(1), [
       update(0, '1000000000', 2_000_000_000n, '1000000000', '1000000001', 1n, 1n),

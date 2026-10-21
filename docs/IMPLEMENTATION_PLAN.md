@@ -15,6 +15,10 @@ This plan implements the assignment in reviewable vertical increments. Each phas
 evidence and leaves the application in a coherent state. A phase is complete only when its listed
 acceptance gate passes; creating the files alone is not completion.
 
+The pure accumulator from Phase 4 is implemented before the Phase 3 worker controller because the
+controller needs an atomic batch consumer. Phase 4's worker integration and snapshot-rate gate remain
+open until that controller exists. This ordering does not change either phase's acceptance gate.
+
 ## 1. Phase 0 — Architecture and technical risk closure
 
 **Goal:** validate the decisions that would be expensive to change after UI work begins.

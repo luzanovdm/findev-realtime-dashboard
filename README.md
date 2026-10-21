@@ -89,6 +89,8 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - Empty pages with explicit TODO markers. Forms, tables, and producer controls are not implemented.
 - Dashboard metrics, producer settings, and market updates are defined beside the feature that owns
   their behavior.
+- `MetricAccumulator` calculates exact Decimal prices and VWAP, bigint cumulative volume, spread,
+  and imbalance; it rejects a bad batch without changing the last confirmed totals.
 - `assembly/index.ts` contains the stateful market-update generator. Its randomness, price walk,
   instrument selection, trades, and order-book quantities run in Wasm; compiled-module tests cover
   the ABI, batch sizes, invariants, deterministic seeds, state continuity, and memory stability.

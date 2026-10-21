@@ -285,7 +285,7 @@ asynchronous behavior.
 
 ### Work
 
-1. Build the form with Angular Signal Forms and native text inputs using numeric input mode. Keep
+1. Build the form with Angular Signal Forms, `FormRoot`, and native text inputs using numeric input mode. Keep
    raw draft text so empty, fractional, and non-finite input remains visible for validation.
 2. Initialize all three draft fields from active settings.
 3. Apply required, integer, and inclusive range validation from the canonical settings rules.
@@ -326,7 +326,7 @@ asynchronous behavior.
 
 1. Render one semantic table row per active instrument in stable symbol order.
 2. Show last price, spread, cumulative volume, VWAP, and imbalance.
-3. Add pure display formatters:
+3. Add pure display formatters exposed through Angular pipes:
    - Decimal cents to locale currency with two decimals using explicit decimal rounding;
    - `bigint` volume to grouped units;
    - imbalance to a fixed readable precision without escaping `[-1, 1]`;

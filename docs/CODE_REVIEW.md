@@ -31,10 +31,12 @@
 3. The settings form previously mirrored active settings through an effect. `linkedSignal` now
    derives the draft from accepted settings while preserving locally edited values. Apply waits for
    the current run's `running` or `error` outcome and resets form interaction state only after a
-   successful acknowledgement.
+   successful acknowledgement. `FormRoot` owns submission, dirty/touched state, and auto-clearing
+   submission errors; reading `form().dirty()` from the linked draft would create a signal cycle.
 4. Dashboard status text and control labels were scattered across a template switch and conditional
    expression. A typed status-to-presentation table now owns that static copy. The component retains
-   a guarded click handler because it crosses from a user event into producer commands.
+   a guarded click handler because it crosses from a user event into producer commands. Pure Angular
+   pipes expose the Decimal and `bigint` formatters to the dashboard template.
 5. Slow delivery now has a bounded, nonblocking warning. Diagnostics include a stable code, run ID,
    lifecycle stage, and available cause or expected/observed facts without exposing those details in
    the interface. Repeated malformed commands cannot flood the same run with failure events.

@@ -126,6 +126,9 @@ describe('Settings form', () => {
     producer.status.set('running');
     producer.outcomes.next('running');
     await fixture.whenStable();
+    await vi.waitFor(() =>
+      expect(fixture.componentInstance.settingsForm().submitting()).toBe(false),
+    );
     fixture.detectChanges();
     expect(fixture.componentInstance.settingsForm().dirty()).toBe(false);
     expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
@@ -156,6 +159,9 @@ describe('Settings form', () => {
     producer.status.set('running');
     producer.outcomes.next('running');
     await fixture.whenStable();
+    await vi.waitFor(() =>
+      expect(fixture.componentInstance.settingsForm().submitting()).toBe(false),
+    );
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
       'settings will reset after reload',
@@ -185,11 +191,17 @@ describe('Settings form', () => {
     producer.status.set('error');
     producer.outcomes.next('error');
     await fixture.whenStable();
+    await vi.waitFor(() =>
+      expect(fixture.componentInstance.settingsForm().submitting()).toBe(false),
+    );
     fixture.detectChanges();
     expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
     expect(fixture.componentInstance.visibleFormError()).toContain('The new run could not start');
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
       'The new run could not start',
     );
+    edit(fixture, 'instrument-count', '3');
+    await fixture.whenStable();
+    expect(fixture.componentInstance.visibleFormError()).toBeUndefined();
   });
 });

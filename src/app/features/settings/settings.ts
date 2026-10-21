@@ -7,7 +7,7 @@ import {
   linkedSignal,
   signal,
 } from '@angular/core';
-import { FormField, form, submit, validate } from '@angular/forms/signals';
+import { FormField, FormRoot, form, validate } from '@angular/forms/signals';
 import { TuiButton } from '@taiga-ui/core';
 import { firstValueFrom } from 'rxjs';
 import { MarketProducerFacade } from '../market-producer/market-producer.facade';
@@ -20,9 +20,22 @@ import {
 } from './settings-draft';
 import type { SettingsDraft } from './settings-draft';
 
+const SAVE_FEEDBACK = {
+  saved: {
+    success: 'Saved in this browser. New run live.',
+    failedRun: 'Your settings were saved in this browser.',
+  },
+  unavailable: {
+    success: 'New run live. Browser storage is unavailable; settings will reset after reload.',
+    failedRun: 'Browser storage is unavailable, so the settings will reset after a reload.',
+  },
+} as const satisfies Readonly<
+  Record<'saved' | 'unavailable', { success: string; failedRun: string }>
+>;
+
 @Component({
   selector: 'app-settings',
-  imports: [FormField, TuiButton],
+  imports: [FormField, FormRoot, TuiButton],
   templateUrl: './settings.html',
   styleUrl: './settings.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,25 +48,29 @@ export class Settings {
     computation: (settings, previous): SettingsDraft => {
       const accepted = draftFromSettings(settings);
       if (!previous) return accepted;
-      const pristine = sameSettingsDraft(previous.value, draftFromSettings(previous.source));
-      return pristine ? accepted : previous.value;
+      return sameSettingsDraft(previous.value, draftFromSettings(previous.source))
+        ? accepted
+        : previous.value;
     },
   });
-  readonly settingsForm = form(this.draft, (path) => {
-    for (const field of PRODUCER_SETTING_NAMES) {
-      validate(path[field], ({ value }) => {
-        const message = draftFieldError(field, value());
-        return message === null ? undefined : { kind: 'invalid-setting', message };
-      });
-    }
-  });
-  readonly formError = signal<{ readonly draft: SettingsDraft; readonly message: string } | null>(
-    null,
+  readonly settingsForm = form(
+    this.draft,
+    (path) => {
+      for (const field of PRODUCER_SETTING_NAMES) {
+        validate(path[field], ({ value }) => {
+          const message = draftFieldError(field, value());
+          return message === null ? undefined : { kind: 'invalid-setting', message };
+        });
+      }
+    },
+    { submission: { action: async () => this.applySettings() } },
   );
-  readonly visibleFormError = computed(() => {
-    const error = this.formError();
-    return error !== null && sameSettingsDraft(error.draft, this.draft()) ? error.message : null;
-  });
+  readonly visibleFormError = computed(
+    () =>
+      this.settingsForm()
+        .errors()
+        .find((error) => error.kind === 'apply-error')?.message,
+  );
   readonly feedback = signal<{
     readonly draft: SettingsDraft;
     readonly kind: 'saved' | 'unavailable';
@@ -70,54 +87,45 @@ export class Settings {
       this.producer.error()?.recoveryAction === 'none',
   );
 
-  onSubmit(event: Event): void {
-    event.preventDefault();
-    if (this.applyUnavailable()) return;
-    this.formError.set(null);
+  private async applySettings(): Promise<{ kind: 'apply-error'; message: string } | undefined> {
     this.feedback.set(null);
-    void submit(this.settingsForm, async () => {
-      const settings = parseSettingsDraft(this.draft());
-      if (settings === null) return;
-      const submittedDraft = draftFromSettings(settings);
-      if (!this.producer.apply(settings)) {
-        this.formError.set({
-          draft: this.draft(),
-          message: 'Settings could not be applied. Try again when the producer is ready.',
-        });
-        return;
-      }
+    const settings = parseSettingsDraft(this.draft());
+    if (settings === null) {
+      return { kind: 'apply-error', message: 'Settings could not be applied. Check the fields.' };
+    }
+    const submittedDraft = draftFromSettings(settings);
+    if (!this.producer.apply(settings)) {
+      return {
+        kind: 'apply-error',
+        message: 'Settings could not be applied. Try again when the producer is ready.',
+      };
+    }
+
+    try {
       const outcome = await firstValueFrom(this.producer.outcomeOf(this.producer.runId()));
       if (this.destroyRef.destroyed) return;
+      const saveStatus = this.producer.settingsSaveStatus() ?? 'unavailable';
+      const copy = SAVE_FEEDBACK[saveStatus];
       if (outcome === 'error') {
-        const storageMessage =
-          this.producer.settingsSaveStatus() === 'saved'
-            ? 'Your settings were saved in this browser.'
-            : 'Browser storage is unavailable, so the settings will reset after a reload.';
-        this.formError.set({
-          draft: this.draft(),
-          message: `The new run could not start. Review the producer error above. ${storageMessage}`,
-        });
+        return {
+          kind: 'apply-error',
+          message: `The new run could not start. Review the producer error above. ${copy.failedRun}`,
+        };
       }
-      if (outcome === 'running') {
-        const saved = this.producer.settingsSaveStatus() === 'saved';
-        this.feedback.set({
-          draft: submittedDraft,
-          kind: saved ? 'saved' : 'unavailable',
-          message: saved
-            ? 'Saved in this browser. New run live.'
-            : 'New run live. Browser storage is unavailable; settings will reset after reload.',
-        });
-        if (sameSettingsDraft(this.draft(), submittedDraft)) {
-          this.settingsForm().reset(draftFromSettings(this.producer.activeSettings()));
-        }
+
+      this.feedback.set({
+        draft: submittedDraft,
+        kind: saveStatus,
+        message: copy.success,
+      });
+      if (sameSettingsDraft(this.draft(), submittedDraft)) {
+        this.settingsForm().reset(draftFromSettings(this.producer.activeSettings()));
       }
-    }).catch(() => {
+    } catch {
       if (!this.destroyRef.destroyed) {
-        this.formError.set({
-          draft: this.draft(),
-          message: 'Settings could not be applied. Try again.',
-        });
+        return { kind: 'apply-error', message: 'Settings could not be applied. Try again.' };
       }
-    });
+    }
+    return undefined;
   }
 }

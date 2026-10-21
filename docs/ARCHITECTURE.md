@@ -90,6 +90,9 @@ src/app/
     dashboard/                 observe and control the active run
       dashboard.ts
       market-metric-formatters.ts
+      currency-cents.pipe.ts
+      volume.pipe.ts
+      imbalance.pipe.ts
     settings/                  edit and apply a new producer run
       settings.ts
 assembly/
@@ -365,9 +368,11 @@ The root-provided producer facade exposes readonly signals for:
 
 Mutations are methods: `pause()`, `resume()`, and `apply(settings)`. Components do not receive the
 worker object or writable application signals. The facade updates at most 50 row projections per
-snapshot, and rows are tracked by stable symbol.
+snapshot, and rows are tracked by stable symbol. Pure template pipes format Decimal and `bigint`
+values without re-running unchanged cells on unrelated change detection.
 
-The Settings route uses Angular Signal Forms. A complete draft object is initialized from active
+The Settings route uses Angular Signal Forms and `FormRoot` for validation, submission state, and
+submission errors. A complete draft object is initialized from active
 settings when the route opens. Fields require integers and the ranges from `TASK.md`. Editing changes
 only the draft. Apply submits an immutable validated copy; success resets the form to the accepted
 active values and starts a new run. Unsaved draft edits are route-local and may be discarded on

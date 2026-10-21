@@ -42,11 +42,11 @@
       @for (metric of producer.metrics(); track metric.instrument) {
         <tr>
           <th scope="row">{{ metric.instrument }}</th>
-          <td>{{ formatCurrencyCents(metric.lastPriceCents) }}</td>
-          <td>{{ formatCurrencyCents(metric.spreadCents) }}</td>
-          <td>{{ formatVolume(metric.volume) }}</td>
-          <td>{{ formatCurrencyCents(metric.vwapCents) }}</td>
-          <td>{{ formatImbalance(metric.imbalance) }}</td>
+          <td>{{ metric.lastPriceCents | currencyCents }}</td>
+          <td>{{ metric.spreadCents | currencyCents }}</td>
+          <td>{{ metric.volume | volume }}</td>
+          <td>{{ metric.vwapCents | currencyCents }}</td>
+          <td>{{ metric.imbalance | imbalance }}</td>
         </tr>
       }
     </tbody>

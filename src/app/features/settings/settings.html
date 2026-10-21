@@ -1,7 +1,7 @@
 <h1>Settings</h1>
 <p class="page-description">Configure the market data producer.</p>
 
-<form class="settings-form" (submit)="onSubmit($event)" novalidate>
+<form class="settings-form" [formRoot]="settingsForm">
   <div class="field">
     <label for="instrument-count">Instrument count</label>
     <p id="instrument-count-help" class="field-help">1–50 instruments</p>

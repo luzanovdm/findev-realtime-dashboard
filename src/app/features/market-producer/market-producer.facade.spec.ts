@@ -199,6 +199,37 @@ describe('MarketProducerFacade', () => {
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects a snapshot whose cumulative volume regresses', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    const worker = FakeWorker.instances[0];
+    acknowledgedRun(worker);
+    worker.emit(snapshot());
+    worker.emit({
+      ...snapshot(),
+      sequence: 2,
+      metrics: snapshot().metrics.map((metric, index) =>
+        index === 0 ? { ...metric, volume: 29n } : metric,
+      ),
+    });
+
+    expect(facade.error()?.code).toBe('protocol');
+    expect(facade.metrics()[0].volume).toBe(0n);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a higher-sequence snapshot with no new trades', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    const worker = FakeWorker.instances[0];
+    acknowledgedRun(worker);
+    worker.emit(snapshot());
+    worker.emit({ ...snapshot(), sequence: 2 });
+
+    expect(facade.error()?.code).toBe('protocol');
+    expect(facade.metrics()[0].volume).toBe(0n);
+  });
+
   it('terminates a worker that never acknowledges initialization', () => {
     vi.useFakeTimers();
     const facade = TestBed.inject(MarketProducerFacade);

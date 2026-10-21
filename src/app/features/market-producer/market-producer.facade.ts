@@ -381,7 +381,12 @@ function reduceProducerState(state: ProducerState, action: ProducerAction): Prod
         state.status !== 'running' ||
         event.sequence <= state.lastSequence ||
         event.metrics.length !== state.activeSettings.instrumentCount ||
-        event.metrics.some((metric, index) => metric.instrument !== instrumentSymbol(index))
+        event.metrics.some(
+          (metric, index) =>
+            metric.instrument !== instrumentSymbol(index) ||
+            metric.volume < state.metrics[index].volume,
+        ) ||
+        !event.metrics.some((metric, index) => metric.volume > state.metrics[index].volume)
       ) {
         return failedState(state, 'protocol');
       }

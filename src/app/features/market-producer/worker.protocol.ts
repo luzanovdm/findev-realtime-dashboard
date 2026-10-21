@@ -116,14 +116,29 @@ export function isProducerWorkerEvent(value: unknown): value is ProducerWorkerEv
 function isInstrumentMetricSnapshot(value: unknown): value is SerializedInstrumentMetricSnapshot {
   if (!isRecord(value)) return false;
 
+  if (
+    !isInstrumentSymbol(value['instrument']) ||
+    !isNullablePositiveDecimal(value['lastPriceCents']) ||
+    !isNullablePositiveDecimal(value['spreadCents']) ||
+    typeof value['volume'] !== 'bigint' ||
+    value['volume'] < 0n ||
+    !isNullablePositiveDecimal(value['vwapCents']) ||
+    !isNullableImbalance(value['imbalance'])
+  ) {
+    return false;
+  }
+
+  if (value['volume'] === 0n) {
+    return (
+      value['lastPriceCents'] === null &&
+      value['spreadCents'] === null &&
+      value['vwapCents'] === null &&
+      value['imbalance'] === null
+    );
+  }
+
   return (
-    isInstrumentSymbol(value['instrument']) &&
-    isNullablePositiveDecimal(value['lastPriceCents']) &&
-    isNullablePositiveDecimal(value['spreadCents']) &&
-    typeof value['volume'] === 'bigint' &&
-    value['volume'] >= 0n &&
-    isNullablePositiveDecimal(value['vwapCents']) &&
-    isNullableImbalance(value['imbalance'])
+    value['lastPriceCents'] !== null && value['spreadCents'] !== null && value['vwapCents'] !== null
   );
 }
 

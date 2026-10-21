@@ -7,8 +7,9 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { routes } from './app.routes';
+import { AppErrorHandler } from './app-error';
 
-describe('Scaffold routing (not task acceptance tests)', () => {
+describe('Application routing', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideRouter(routes)] }));
 
   it('opens Dashboard by default', async () => {
@@ -16,7 +17,7 @@ describe('Scaffold routing (not task acceptance tests)', () => {
     expect(harness.routeNativeElement?.querySelector('h1')?.textContent).toBe('Dashboard');
   });
 
-  it('navigates between both placeholder pages', async () => {
+  it('navigates between dashboard and settings', async () => {
     const harness = await RouterTestingHarness.create('/settings');
     expect(harness.routeNativeElement?.querySelector('h1')?.textContent).toBe('Settings');
     await harness.navigateByUrl('/dashboard');
@@ -24,15 +25,8 @@ describe('Scaffold routing (not task acceptance tests)', () => {
   });
 });
 
-describe('TASK.md acceptance coverage — TODO, not implemented', () => {
-  it.todo('metric calculations: example, zero denominators, instrument isolation');
-  it.todo('settings validation and applying a new run');
-  it.todo('pause/resume and stale-run rejection');
-  it.todo('Wasm generator: batch sizes, state and valid market updates');
-});
-
 // Checks the real Taiga shell with Node/jsdom infrastructure adapters.
-describe('Scaffold shell', () => {
+describe('Application shell', () => {
   beforeEach(() => {
     // jsdom has no viewport media queries; this is not a browser rendering test.
     vi.stubGlobal('matchMedia', (media: string) => ({
@@ -94,5 +88,39 @@ describe('Scaffold shell', () => {
 
     (alert.querySelector('button') as HTMLButtonElement).click();
     expect(producer.retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a safe fallback when an unexpected interface error is reported', async () => {
+    const producer = {
+      start: vi.fn(),
+      retry: vi.fn(),
+      status: signal('running'),
+      error: signal(null),
+      stale: signal(false),
+      snapshotAt: signal(null),
+    };
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideRouter(routes),
+        provideTaiga({ mode: 'light' }),
+        { provide: MarketProducerFacade, useValue: producer },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      TestBed.inject(AppErrorHandler).handleError(new Error('private error detail'));
+      await fixture.whenStable();
+      const alert = fixture.nativeElement.querySelector('.application-error') as HTMLElement;
+      expect(alert.textContent).toContain('An unexpected interface error occurred');
+      expect(alert.textContent).not.toContain('private error detail');
+      expect(alert.querySelector('a')?.getAttribute('href')).toBe(document.baseURI);
+      expect(fixture.nativeElement.querySelectorAll('nav a')).toHaveLength(2);
+      expect(logged).toHaveBeenCalledTimes(1);
+    } finally {
+      logged.mockRestore();
+    }
   });
 });

@@ -75,6 +75,43 @@ describe('market generator adapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('classifies network failure and stops after bounded retries', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockRejectedValue(new Error('private network detail'));
+    vi.stubGlobal('fetch', fetchMock);
+    const rejection = expect(loadMarketGenerator('/offline.wasm')).rejects.toMatchObject({
+      code: 'wasm-fetch',
+      retryable: true,
+    });
+    await vi.advanceTimersByTimeAsync(300);
+    await rejection;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('classifies invalid Wasm bytes as an instantiation failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }),
+    );
+    await expect(loadMarketGenerator('/invalid.wasm')).rejects.toMatchObject({
+      code: 'wasm-instantiate',
+    });
+  });
+
+  it('rejects a module with missing ABI exports', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }),
+    );
+    vi.stubGlobal('WebAssembly', {
+      Memory: WebAssembly.Memory,
+      instantiate: vi.fn().mockResolvedValue({ instance: { exports: { abiVersion: () => 1 } } }),
+    });
+    await expect(loadMarketGenerator('/missing-exports.wasm')).rejects.toMatchObject({
+      code: 'wasm-abi',
+    });
+  });
+
   it('rejects an incompatible ABI before generation', async () => {
     vi.stubGlobal(
       'fetch',

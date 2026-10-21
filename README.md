@@ -51,6 +51,7 @@ not rebuild AssemblyScript automatically.
 | `npm run commit`       | Create a guided Conventional Commit                                  |
 | `npm run audit`        | Check dependencies for high-severity vulnerabilities                 |
 | `npm run check`        | Check formatting and run all available tests                         |
+| `npm run perf:soak`    | Build and run a five-minute maximum-rate worker/accounting soak      |
 | `npm run clean`        | Remove generated `dist`, `.angular/cache`, and `public/wasm` files   |
 
 Clean verification from scratch:
@@ -104,6 +105,8 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - The application-scoped producer facade owns the worker across route navigation. It reduces
   validated events to one state stream, exposes readonly signals, rejects stale runs, and presents
   safe errors and recovery actions.
+- Angular's global error handler exposes a fixed English recovery message for unexpected interface
+  failures; the HTML shell has a fallback if application bootstrap fails before Angular renders.
 - EditorConfig, Prettier, and VS Code format-on-save settings with recommended extensions.
 
 ## Producer flow
@@ -120,10 +123,11 @@ possible.
 `tests/wasm-abi.test.mjs` and `tests/wasm-generator.test.mjs` execute the compiled module directly.
 `tests/producer-worker.test.mjs` runs the production worker bundle with the compiled Wasm asset,
 including a maximum-size batch, Pause/Resume, reset, and missing-asset failure.
+The assignment's required unit scenarios are covered by the metric accumulator, settings draft and
+form, producer controller and facade, and compiled-generator test suites.
 
-These tests prove compilation and transport in Node. They do not replace browser rendering or the
-assignment's acceptance tests. Browser and end-to-end checks are not automated. `it.todo` cases in
-the unit suite identify missing business-requirement coverage and do not count as passed tests.
+These tests prove compilation and transport in Node. Browser rendering is checked separately.
+Automated end-to-end tests are not required by `TASK.md` and are not currently included.
 
 ## Remaining implementation
 

@@ -74,7 +74,8 @@ The catalogue is deliberately finite. Unknown codes and malformed error events a
 - The facade accepts only validated events for its current `runId`. Older run events are discarded
   without changing state. A malformed event that purports to belong to the current run stops it.
 - A global Angular error handler and unhandled-rejection listener are a diagnostic fallback. They do
-  not authorize continued generation after a failed producer command or corrupted metric state.
+  not authorize continued generation after a failed producer command or corrupted metric state. The
+  shell shows fixed recovery copy and a full-reload link without exposing exception details.
 
 ### Wasm loading and execution
 

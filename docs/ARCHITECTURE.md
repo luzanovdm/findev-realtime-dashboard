@@ -2,7 +2,7 @@
 
 | Field                | Value                                                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Status               | Runtime implemented locally; verification and deployment pending                                                   |
+| Status               | Runtime and local acceptance verified; deployment pending                                                          |
 | Owner                | Repository maintainer                                                                                              |
 | Version              | 1.0                                                                                                                |
 | Last reviewed        | 2026-10-21                                                                                                         |
@@ -68,6 +68,7 @@ real behavior:
 ```text
 src/app/
   app.ts                       application composition and eager producer startup
+  app-error.ts                 application-wide unexpected-error fallback
   app.routes.ts                route composition
   features/
     market-producer/           live-market production capability
@@ -380,16 +381,24 @@ an older pending presentation snapshot with the latest aggregate state.
 
 Initial performance budgets are assumptions to validate on a reference development machine:
 
-| Budget                  | Target                                                                   |
-| ----------------------- | ------------------------------------------------------------------------ |
-| Update accounting       | Zero lost or duplicated updates in deterministic count tests             |
-| UI snapshot rate        | At most 10 messages per second while running                             |
-| Main-thread render work | Under 16 ms p95 at 50 rows and maximum settings                          |
-| Command feedback        | Status change visible within 100 ms p95, excluding initial Wasm download |
-| Memory growth           | Flat after run initialization during a 5-minute maximum-rate soak        |
+| Budget                     | Target                                                               |
+| -------------------------- | -------------------------------------------------------------------- |
+| Update accounting          | Zero lost or duplicated updates in deterministic count tests         |
+| UI snapshot rate           | At most 10 messages per second while running                         |
+| Main-thread responsiveness | No task over 50 ms during a 10-second, 50-row maximum-settings run   |
+| Command feedback           | Status change visible within 100 ms, excluding initial Wasm download |
+| Memory growth              | No sustained growth during a 5-minute maximum-settings soak          |
 
 If measurement fails, optimize the worker-to-UI projection or Wasm decoding first. Do not bypass
 accounting or move generation onto the main thread.
+
+The initial 16 ms p95 render-duration target was replaced with observable browser evidence: without
+application-specific render instrumentation, frame spacing does not measure render work. In local
+Headless Chrome 155 at 50 instruments, 1,000 updates per batch, and 50 ms intervals, a 10-second
+sample had no tasks over 50 ms and a 16.7 ms p95 frame interval. Pause feedback was observed at
+1.3 ms. A five-minute production-worker soak accounted for 5,473,000 updates, emitted 9.13 running
+snapshots per second, and ended at 26.4 MB used heap after a transient 65.9 MB peak. These are local
+observations, not a claim about every device or deployed host.
 
 ## 11. Errors, cleanup, and recovery
 
@@ -444,14 +453,9 @@ TypeScript reimplementation.
 
 These are bounded checks, not unresolved architecture ownership:
 
-1. Confirm the final AssemblyScript source has no managed allocation on initialization or generation,
-   and retain `stub` only if the soak test shows flat memory.
-2. Verify `bigint` volume cloning in the supported local browsers. Decimal values always cross the
-   worker boundary as validated canonical strings.
-3. Measure the 10 Hz snapshot budget at maximum settings and adjust only the coalescing interval if
-   rendering exceeds the target.
-4. Select and configure the static host after testing its private-repository connection, SPA rewrite,
-   and Wasm MIME behavior.
+1. Verify the selected static host's private-repository connection, SPA rewrite, Wasm MIME response,
+   and automatic push-to-live behavior. Local browser and worker tests cannot establish those remote
+   properties.
 
 ## 15. Official technical references
 

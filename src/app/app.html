@@ -26,6 +26,12 @@
         >Settings</a
       >
     </nav>
+    @if (appErrors.failed()) {
+      <div class="application-error" role="alert" aria-live="assertive">
+        <p>An unexpected interface error occurred. Reload the page to restore the dashboard.</p>
+        <a tuiButton size="s" [href]="reloadUrl">Reload page</a>
+      </div>
+    }
     @if (producer.error(); as error) {
       <div class="producer-error" role="alert" aria-live="assertive">
         <p>{{ error.message }}</p>

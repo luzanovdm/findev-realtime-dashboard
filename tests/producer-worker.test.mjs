@@ -25,7 +25,7 @@ function expectedVolumes(instrumentCount, batchSize, seed) {
 }
 
 test(
-  'production worker runs, pauses, resumes, resets, and reports missing Wasm',
+  'production worker runs, pauses, resets, and classifies missing or invalid Wasm',
   { timeout: 10000 },
   async (t) => {
     const workers = (await readdir(output)).filter((name) => /^worker-.*\.js$/.test(name));
@@ -34,6 +34,9 @@ test(
       if (request.url === '/wasm/market-generator.wasm') {
         response.writeHead(200, { 'Content-Type': 'application/wasm' });
         response.end(wasm);
+      } else if (request.url === '/invalid.wasm') {
+        response.writeHead(200, { 'Content-Type': 'application/wasm' });
+        response.end(Buffer.alloc(8));
       } else {
         response.writeHead(404);
         response.end();
@@ -121,6 +124,16 @@ test(
     });
     const error = await waitFor((event) => event.type === 'run-error' && event.runId === 3);
     assert.equal(error.code, 'wasm-fetch');
-    worker.postMessage({ type: 'dispose', runId: 3 });
+
+    worker.postMessage({
+      type: 'start-run',
+      runId: 4,
+      settings: firstSettings,
+      seed: 1,
+      wasmUrl: `${origin}/invalid.wasm`,
+    });
+    const invalid = await waitFor((event) => event.type === 'run-error' && event.runId === 4);
+    assert.equal(invalid.code, 'wasm-instantiate');
+    worker.postMessage({ type: 'dispose', runId: 4 });
   },
 );

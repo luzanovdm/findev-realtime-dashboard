@@ -4,6 +4,7 @@ import { DEFAULT_PRODUCER_SETTINGS } from './producer-settings';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
+  static failConstruct = false;
   static failPost = false;
   onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -12,6 +13,7 @@ class FakeWorker {
   readonly terminate = vi.fn();
 
   constructor() {
+    if (FakeWorker.failConstruct) throw new Error('private constructor failure');
     FakeWorker.instances.push(this);
   }
 
@@ -55,6 +57,7 @@ function snapshot(runId = 1, count = 5) {
 describe('MarketProducerFacade', () => {
   beforeEach(() => {
     FakeWorker.instances = [];
+    FakeWorker.failConstruct = false;
     FakeWorker.failPost = false;
     vi.stubGlobal('Worker', FakeWorker);
     vi.stubGlobal('crypto', {
@@ -221,6 +224,51 @@ describe('MarketProducerFacade', () => {
     facade.start();
     expect(facade.error()?.code).toBe('worker-crash');
     expect(FakeWorker.instances[0].terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains a synchronous worker construction failure', () => {
+    FakeWorker.failConstruct = true;
+    const facade = TestBed.inject(MarketProducerFacade);
+    expect(() => facade.start()).not.toThrow();
+    expect(facade.error()?.code).toBe('worker-unavailable');
+    expect(FakeWorker.instances).toHaveLength(0);
+  });
+
+  it('hides previously confirmed values after a worker message decode failure', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    const worker = FakeWorker.instances[0];
+    acknowledgedRun(worker);
+    worker.emit(snapshot());
+    worker.onmessageerror?.();
+    expect(facade.error()?.code).toBe('protocol');
+    expect(facade.metrics()[0].volume).toBe(0n);
+    expect(facade.stale()).toBe(false);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a late error from the replaced run', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    const worker = FakeWorker.instances[0];
+    acknowledgedRun(worker);
+    expect(facade.apply({ instrumentCount: 2, updatesPerBatch: 1, batchIntervalMs: 50 })).toBe(
+      true,
+    );
+    worker.emit({ type: 'run-error', runId: 1, code: 'generation' });
+    expect(facade.status()).toBe('initializing');
+    expect(facade.error()).toBeNull();
+  });
+
+  it('detaches and terminates the worker once when the application is destroyed', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    const worker = FakeWorker.instances[0];
+    TestBed.resetTestingModule();
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(worker.onmessage).toBeNull();
+    expect(worker.onerror).toBeNull();
+    expect(worker.onmessageerror).toBeNull();
   });
 
   it('reports unsupported Worker without leaving initialization pending', () => {

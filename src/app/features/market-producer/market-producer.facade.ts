@@ -8,6 +8,7 @@ import {
   filter,
   fromEvent,
   map,
+  of,
   pairwise,
   scan,
   shareReplay,
@@ -16,6 +17,7 @@ import {
   switchMap,
   take,
   timer,
+  timeout,
 } from 'rxjs';
 import type { Observable } from 'rxjs';
 import {
@@ -28,11 +30,12 @@ import { ProducerSettingsStorage } from './producer-settings-storage';
 import { isProducerWorkerEvent } from './generation/worker.protocol';
 import type { ProducerWorkerCommand } from './generation/worker.protocol';
 import { controlDeadline, INITIAL_PRODUCER_STATE, reduceProducerState } from './producer-state';
-import type { ProducerAction, ProducerState } from './producer-state';
+import type { ProducerAction } from './producer-state';
 
 const LIVENESS_DEADLINE_MS = 5_000;
+const OUTCOME_DEADLINE_MS = LIVENESS_DEADLINE_MS + 1_000;
 
-export type RunOutcome = 'running' | 'error';
+export type RunOutcome = 'running' | 'error' | 'replaced' | 'timeout';
 
 @Injectable({ providedIn: 'root' })
 export class MarketProducerFacade {
@@ -44,7 +47,7 @@ export class MarketProducerFacade {
   private readonly state$ = this.actions.pipe(
     scan(reduceProducerState, INITIAL_PRODUCER_STATE),
     startWith(INITIAL_PRODUCER_STATE),
-    shareReplay({ bufferSize: 1, refCount: false }),
+    shareReplay({ bufferSize: 1, refCount: true }),
   );
   private readonly state = toSignal(this.state$, { requireSync: true });
 
@@ -154,15 +157,9 @@ export class MarketProducerFacade {
   }
 
   apply(settings: ProducerSettings): boolean {
-    if (
-      !this.started ||
-      this.disposed ||
-      !isProducerSettings(settings) ||
-      this.status() === 'initializing' ||
-      this.error()?.recoveryAction === 'none'
-    ) {
-      return false;
-    }
+    const producerReady = this.started && !this.disposed && this.status() !== 'initializing';
+    const recoveryAllowed = this.error()?.recoveryAction !== 'none';
+    if (!producerReady || !recoveryAllowed || !isProducerSettings(settings)) return false;
     this.settingsSaveState.set(this.settingsStorage.save(settings) ? 'saved' : 'unavailable');
     this.beginRun(copyProducerSettings(settings));
     return true;
@@ -174,11 +171,14 @@ export class MarketProducerFacade {
 
   outcomeOf(runId: number): Observable<RunOutcome> {
     return this.state$.pipe(
-      filter(
-        (state): state is ProducerState & { readonly status: RunOutcome } =>
-          state.runId === runId && (state.status === 'running' || state.status === 'error'),
-      ),
-      map((state) => state.status),
+      map((state): RunOutcome | null => {
+        if (state.runId > runId) return 'replaced';
+        if (state.runId !== runId) return null;
+        if (state.status === 'running' || state.status === 'error') return state.status;
+        return null;
+      }),
+      filter((outcome): outcome is RunOutcome => outcome !== null),
+      timeout({ first: OUTCOME_DEADLINE_MS, with: () => of('timeout' as const) }),
       take(1),
     );
   }

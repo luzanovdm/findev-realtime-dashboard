@@ -69,6 +69,17 @@ The English Intl formatting revision passed the same locked command: 156 Angular
 eight compiled-Wasm and production-worker tests, and the production build. Tests include exact
 formatting above `Number.MAX_SAFE_INTEGER` for both Decimal currency values and `bigint` counts.
 
+The validation and stream-lifetime revision passed `npm run check`: formatting, strict
+application/worker/spec type checks, 172 Angular/Vitest tests, eight compiled-Wasm and
+production-worker tests, and the production build. Tests cover invalid generator inputs and records,
+controller disposal during a pending load, disconnected event delivery, unexpected command-stream
+exceptions, stale Apply outcomes, and bounded Wasm fetch/instantiation waits. A separate 10-second
+built-worker run at 50 instruments, 1,000 updates per batch, and a requested 50 ms interval accounted
+for all 190,000 generated updates across 190 batches. It delivered 95 running snapshots (9.5 Hz),
+with a 102 ms shortest worker timestamp interval and a 1 ms rounded Pause acknowledgement. Two heap
+samples (12.6 MB and 12.8 MB) are insufficient to establish a memory trend; the older five-minute
+soak remains the longer observation and predates this revision.
+
 The browser observations are local acceptance evidence, not a claim about every device or deployed
 host. The GitHub repository remains private. Cloudflare Pages has no GitHub connection or Pages
 project for this repository yet. Remote route refreshes, Wasm response headers, a public demo, and

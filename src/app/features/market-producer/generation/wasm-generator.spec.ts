@@ -54,6 +54,44 @@ describe('market generator adapter', () => {
     );
   });
 
+  it('rejects invalid generator arguments without retaining the prior initialization', () => {
+    const generator = generatorWithRecords([validRecord]);
+    expect(() => generator.initialize(0, 1)).toThrowError(
+      expect.objectContaining({ code: 'protocol' }),
+    );
+    expect(() => generator.generateBatch(1)).toThrowError(
+      expect.objectContaining({ code: 'protocol' }),
+    );
+    expect(() => generator.initialize(1, 0)).toThrowError(
+      expect.objectContaining({ code: 'protocol' }),
+    );
+    expect(() => generator.initialize(1, 0x1_0000_0000)).toThrowError(
+      expect.objectContaining({ code: 'protocol' }),
+    );
+    generator.initialize(1, 1);
+    expect(() => generator.generateBatch(1.5)).toThrowError(
+      expect.objectContaining({ code: 'protocol' }),
+    );
+    expect(() => generator.generateBatch(1_001)).toThrowError(
+      expect.objectContaining({ code: 'protocol' }),
+    );
+  });
+
+  it.each([
+    { field: 0, value: 1, reason: 'instrument outside the run' },
+    { field: 1, value: 0, reason: 'nonpositive trade price' },
+    { field: 2, value: 0, reason: 'nonpositive trade quantity' },
+    { field: 4, value: 10196, reason: 'unordered quote' },
+    { field: 1, value: 10198, reason: 'trade away from bid and ask' },
+    { field: 5, value: -1, reason: 'negative book quantity' },
+  ])('rejects $reason', ({ field, value }) => {
+    const invalid: number[] = [...validRecord];
+    invalid[field] = value;
+    expect(() => generatorWithRecords([invalid]).generateBatch(1)).toThrowError(
+      expect.objectContaining({ code: 'invalid-update' }),
+    );
+  });
+
   it('classifies a generation trap without returning a partial batch', () => {
     const generator = new MarketGenerator({
       memory: new WebAssembly.Memory({ initial: 1 }),
@@ -100,6 +138,38 @@ describe('market generator adapter', () => {
     await vi.advanceTimersByTimeAsync(300);
     await rejection;
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('ends a stalled Wasm request with a typed fetch failure', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    const rejection = expect(loadMarketGenerator('/stalled.wasm')).rejects.toMatchObject({
+      code: 'wasm-fetch',
+      retryable: false,
+    });
+
+    await vi.advanceTimersByTimeAsync(4_500);
+    await rejection;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends stalled Wasm instantiation with a typed failure', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }),
+    );
+    vi.stubGlobal('WebAssembly', {
+      Memory: WebAssembly.Memory,
+      instantiate: vi.fn(() => new Promise(() => {})),
+    });
+    const rejection = expect(loadMarketGenerator('/stalled-init.wasm')).rejects.toMatchObject({
+      code: 'wasm-instantiate',
+    });
+
+    await vi.advanceTimersByTimeAsync(4_500);
+    await rejection;
   });
 
   it('classifies invalid Wasm bytes as an instantiation failure', async () => {

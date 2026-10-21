@@ -78,6 +78,24 @@ loop because it validates every generated trade at up to 20,000 updates per seco
 | Pending form outcome subscription                  | The Settings route now cancels its wait for a run acknowledgement when destroyed. A component test checks that the observable has no remaining subscriber after route teardown.                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Workflow logic in route components                 | `SettingsFormService` owns the Signal Form draft, validation registration, Apply outcome, and feedback. `DashboardService` owns status presentation and guarded producer commands. Both are provided by their route components, so local state and subscriptions end with the route. The components contain only view imports and service injection.                                                                                                                                                                                                                                       |
 
+## Follow-up review: validation and stream termination
+
+The Wasm adapter now names generator input rules in `generation/generator-contract.ts`, uses a
+predicate for the aligned output slice, and checks generated records through named trade and quote
+rules. Worker protocol and metrics reuse the domain-neutral safe-integer guards in
+`core/validation/integer-range.ts`. Generator-specific limits remain in the producer feature; `core`
+has no knowledge of instrument or batch settings. An invalid reinitialization clears the adapter's
+prior initialized state before rejecting the input. AssemblyScript keeps its own named input guards
+at the separate Wasm compilation boundary.
+
+The controller owns and explicitly disposes its command subscription and subject. Disposal aborts a
+pending load and cancels scheduled generation; unexpected stream exceptions produce a typed failure
+when a run is known. A disconnected output channel also closes the controller. The Worker removes its
+message listener when the controller stops. The facade's subscriptions use `takeUntilDestroyed`, and
+its shared reducer uses reference-counted replay. Apply outcome waits complete on acknowledgement,
+failure, replacement, timeout, or route destruction. Wasm fetch and instantiation have bounded waits.
+Unit tests cover these termination paths and invalid generator records.
+
 The table is capped at 50 rows by `TASK.md`. The current maximum-rate browser sample found no task
 over 50 ms in ten seconds and rendered all 50 semantic rows without page-width overflow. Virtual
 scrolling would remove offscreen rows from the native table and add a

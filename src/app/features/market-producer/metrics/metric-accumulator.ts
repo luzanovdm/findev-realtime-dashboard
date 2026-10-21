@@ -5,6 +5,7 @@ import {
   toNullableDecimalString,
 } from '../../../core/money/financial-decimal';
 import { isRecord } from '../../../core/validation/is-record';
+import { isIntegerInRange, isNonNegativeSafeInteger } from '../../../core/validation/integer-range';
 import type {
   InstrumentMetricSnapshot,
   MarketUpdate,
@@ -43,11 +44,7 @@ export interface MetricState {
 
 export function createMetricState(instrumentCount: number): MetricState {
   const { minimum, maximum } = PRODUCER_SETTING_CONSTRAINTS.instrumentCount;
-  if (
-    !Number.isInteger(instrumentCount) ||
-    instrumentCount < minimum ||
-    instrumentCount > maximum
-  ) {
+  if (!isIntegerInRange(instrumentCount, { minimum, maximum })) {
     throw new RangeError(`Instrument count must be an integer from ${minimum} to ${maximum}`);
   }
   return { instrumentCount, instruments: Array.from({ length: instrumentCount }, emptyState) };
@@ -139,8 +136,7 @@ function assertValidUpdate(value: unknown, instrumentCount: number): asserts val
 type ValueGuard = (value: unknown) => boolean;
 
 const UPDATE_FIELDS: readonly (readonly [string, ValueGuard])[] = Object.entries({
-  instrumentIndex: (value: unknown) =>
-    typeof value === 'number' && Number.isInteger(value) && value >= 0,
+  instrumentIndex: isNonNegativeSafeInteger,
   priceCents: isPositiveWholeDecimal,
   tradeQuantity: (value: unknown) => typeof value === 'bigint' && value > 0n,
   bidCents: isPositiveWholeDecimal,

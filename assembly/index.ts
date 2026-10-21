@@ -27,6 +27,14 @@ function randomBelow(exclusiveMaximum: u32): u32 {
   return nextRandom() % exclusiveMaximum;
 }
 
+function isSupportedInstrumentCount(count: i32): bool {
+  return count >= 1 && count <= MAX_INSTRUMENTS;
+}
+
+function canGenerateBatch(size: i32): bool {
+  return activeInstrumentCount > 0 && size >= 1 && size <= MAX_BATCH_SIZE;
+}
+
 export function abiVersion(): i32 {
   return 1;
 }
@@ -37,7 +45,7 @@ export function recordWidth(): i32 {
 
 export function initialize(instrumentCount: i32, seed: i32): i32 {
   activeInstrumentCount = 0;
-  if (instrumentCount < 1 || instrumentCount > MAX_INSTRUMENTS) return -1;
+  if (!isSupportedInstrumentCount(instrumentCount)) return -1;
 
   randomState = seed === 0 ? ZERO_SEED : <u32>seed;
   for (let index: i32 = 0; index < MAX_INSTRUMENTS; index++) {
@@ -52,7 +60,7 @@ export function initialize(instrumentCount: i32, seed: i32): i32 {
 }
 
 export function generateBatch(batchSize: i32): i32 {
-  if (activeInstrumentCount === 0 || batchSize < 1 || batchSize > MAX_BATCH_SIZE) return -1;
+  if (!canGenerateBatch(batchSize)) return -1;
 
   for (let record: i32 = 0; record < batchSize; record++) {
     const instrumentIndex = <i32>randomBelow(<u32>activeInstrumentCount);

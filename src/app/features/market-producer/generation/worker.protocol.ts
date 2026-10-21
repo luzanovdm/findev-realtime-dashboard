@@ -5,9 +5,14 @@ import type {
 } from '../market-producer.types';
 import { financialDecimal, isDecimalString } from '../../../core/money/financial-decimal';
 import { isRecord } from '../../../core/validation/is-record';
+import {
+  isNonNegativeSafeInteger,
+  isPositiveSafeInteger,
+} from '../../../core/validation/integer-range';
 import { isProducerErrorCode } from '../producer-error';
 import { isProducerSettings, PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';
 import type { ProducerSettings } from '../producer-settings';
+import { isGeneratorInstrumentCount, isGeneratorSeed } from './generator-contract';
 
 export interface StartRunCommand {
   readonly type: 'start-run';
@@ -76,14 +81,13 @@ type FieldGuards = readonly (readonly [string, ValueGuard])[];
 
 const START_FIELDS: FieldGuards = Object.entries({
   settings: isProducerSettings,
-  seed: isSeed,
+  seed: isGeneratorSeed,
   wasmUrl: (value: unknown) => typeof value === 'string' && value.trim().length > 0,
 } satisfies Readonly<Record<'settings' | 'seed' | 'wasmUrl', ValueGuard>>);
 
 const SNAPSHOT_FIELDS: FieldGuards = Object.entries({
-  sequence: isRunId,
-  timestampMs: (value: unknown) =>
-    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0,
+  sequence: isPositiveSafeInteger,
+  timestampMs: isNonNegativeSafeInteger,
   metrics: isMetricList,
 } satisfies Readonly<Record<'sequence' | 'timestampMs' | 'metrics', ValueGuard>>);
 
@@ -118,7 +122,7 @@ export function isProducerWorkerEvent(value: unknown): value is ProducerWorkerEv
 }
 
 function validMessage(value: unknown, guards: ReadonlyMap<string, RecordGuard>): boolean {
-  if (!isRecord(value) || !isRunId(value['runId'])) return false;
+  if (!isRecord(value) || !isPositiveSafeInteger(value['runId'])) return false;
   const type = value['type'];
   return typeof type === 'string' && (guards.get(type)?.(value) ?? false);
 }
@@ -153,13 +157,9 @@ function validMetricAvailability(value: RecordValue): boolean {
 }
 
 function isMetricList(value: unknown): value is readonly SerializedInstrumentMetricSnapshot[] {
-  if (
-    !Array.isArray(value) ||
-    value.length > PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum ||
-    !value.every(isInstrumentMetricSnapshot)
-  ) {
-    return false;
-  }
+  if (!Array.isArray(value)) return false;
+  if (value.length > PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum) return false;
+  if (!value.every(isInstrumentMetricSnapshot)) return false;
 
   return new Set(value.map((metric) => metric.instrument)).size === value.length;
 }
@@ -171,19 +171,11 @@ function isInstrumentSymbol(value: unknown): value is string {
   if (match === null) return false;
 
   const sequence = Number(match[1]);
-  return sequence >= 1 && sequence <= PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum;
+  return isGeneratorInstrumentCount(sequence);
 }
 
 function isProducerStatus(value: unknown): value is ProducerStatus {
   return value === 'initializing' || value === 'running' || value === 'paused' || value === 'error';
-}
-
-function isRunId(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
-}
-
-function isSeed(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 0xffff_ffff;
 }
 
 function isNullablePositiveDecimal(value: unknown): boolean {

@@ -213,6 +213,30 @@ describe('MarketProducerFacade', () => {
     expect(facade.metrics()[0].volume).toBe(0n);
   });
 
+  it('completes an obsolete run outcome without retaining a subscriber', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    acknowledgedRun(FakeWorker.instances[0]);
+    expect(facade.apply(DEFAULT_PRODUCER_SETTINGS)).toBe(true);
+    const outcomes: string[] = [];
+    const subscription = facade.outcomeOf(1).subscribe((outcome) => outcomes.push(outcome));
+
+    expect(outcomes).toEqual(['replaced']);
+    expect(subscription.closed).toBe(true);
+  });
+
+  it('bounds an outcome that never receives a matching run event', () => {
+    vi.useFakeTimers();
+    const facade = TestBed.inject(MarketProducerFacade);
+    const outcomes: string[] = [];
+    const subscription = facade.outcomeOf(42).subscribe((outcome) => outcomes.push(outcome));
+
+    vi.advanceTimersByTime(6_000);
+
+    expect(outcomes).toEqual(['timeout']);
+    expect(subscription.closed).toBe(true);
+  });
+
   it('hides values after a malformed current-run snapshot', () => {
     const facade = TestBed.inject(MarketProducerFacade);
     facade.start();

@@ -81,6 +81,7 @@ src/app/
       intl-string-format.d.ts  exact decimal-string Intl overload missing from TypeScript
     validation/
       is-record.ts             runtime object guard at untyped boundaries
+      integer-range.ts         reusable safe-integer and inclusive-range guards
   features/
     market-producer/           live-market production capability
       market-producer.facade.ts public Angular facade; the feature's public entry point
@@ -90,6 +91,7 @@ src/app/
       producer-settings-storage.ts browser-scoped accepted settings
       producer-error.ts        failure policy and public error copy
       generation/              worker execution and Wasm transport
+        generator-contract.ts  generator seed, instrument, and batch input rules
         producer.worker.ts
         producer-controller.ts
         worker.protocol.ts
@@ -120,7 +122,8 @@ feature root. `core/money` owns the exact Decimal policy and reusable USD presen
 `core/numbers` owns reusable count formatting. The market-specific imbalance formatter stays in
 `instrument-table`. All three presentation functions use `Intl.NumberFormat` with explicit `en-US`
 formatters. Decimal values remain exact strings at the Intl boundary and are never converted to
-binary floating point for display. `core/validation` contains runtime rules used across boundaries.
+binary floating point for display. `core/validation` contains record and integer-range rules used
+across boundaries. Generator-specific limits stay in `generation/generator-contract.ts`.
 
 Dependency rules:
 
@@ -200,8 +203,12 @@ Command semantics:
 - **Teardown:** unsubscribe from generation, remove event handlers, and terminate the worker.
 
 The worker's `switchMap` unsubscribes from the previous run at every Apply, aborting a pending Wasm
-fetch and canceling scheduled batches. The facade rejects events whose `runId` is not current. These
-boundaries handle a slow Wasm fetch, an already queued scheduler task, and a late old-run message.
+fetch and canceling scheduled batches. The controller owns an explicit subscription and closes it,
+its command subject, and the active load on `dispose` or an unexpected stream/delivery failure. The
+worker removes its message listener after controller disposal. Wasm fetch and instantiation have
+bounded waits. The facade rejects events whose `runId` is not current. These boundaries handle a
+slow Wasm fetch, an already queued scheduler task, a disconnected event channel, and a late old-run
+message.
 
 ## 6. Wasm generator boundary
 
@@ -315,7 +322,10 @@ publishes at most one normal snapshot per 100 ms, with a final confirmed snapsho
 RxJS scheduler injection lets controller tests advance virtual time without waiting for real
 50–2,000 ms intervals. The Angular facade projects validated events through one state reducer into
 readonly signals. Its initialization, command, and liveness watchdogs use `switchMap` to cancel prior
-deadlines; document visibility is an observable input.
+deadlines; document visibility is an observable input. All facade subscriptions use
+`takeUntilDestroyed`, and its shared reducer stream releases the source when the final subscriber
+leaves. A Settings Apply waits for one outcome with route-destruction cancellation and a bounded
+fallback; a replaced run resolves explicitly instead of leaving a stale waiter.
 
 The command protocol is a closed union:
 

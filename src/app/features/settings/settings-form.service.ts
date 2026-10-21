@@ -25,6 +25,12 @@ const SAVE_FEEDBACK = {
   Record<'saved' | 'unavailable', { success: string; failedRun: string }>
 >;
 
+const APPLY_FAILURE_MESSAGE = {
+  error: 'The new run could not start. Review the producer error above.',
+  replaced: 'A newer run replaced this submission. Review the current settings.',
+  timeout: 'The new run did not respond in time. Try applying the settings again.',
+} as const satisfies Readonly<Record<'error' | 'replaced' | 'timeout', string>>;
+
 @Injectable()
 export class SettingsFormService {
   private readonly producer = inject(MarketProducerFacade);
@@ -93,18 +99,19 @@ export class SettingsFormService {
       };
     }
 
+    const runId = this.producer.runId();
+    const saveStatus = this.producer.settingsSaveStatus() ?? 'unavailable';
+    const copy = SAVE_FEEDBACK[saveStatus];
+
     try {
-      const runId = this.producer.runId();
       const outcome = await firstValueFrom(
         this.producer.outcomeOf(runId).pipe(takeUntilDestroyed(this.destroyRef)),
       );
       if (this.destroyRef.destroyed) return;
-      const saveStatus = this.producer.settingsSaveStatus() ?? 'unavailable';
-      const copy = SAVE_FEEDBACK[saveStatus];
-      if (outcome === 'error') {
+      if (outcome !== 'running') {
         return {
           kind: 'apply-error',
-          message: `The new run could not start. Review the producer error above. ${copy.failedRun}`,
+          message: `${APPLY_FAILURE_MESSAGE[outcome]} ${copy.failedRun}`,
         };
       }
 

@@ -1,18 +1,88 @@
-import { catchError, defer, firstValueFrom, from, retry, switchMap, throwError, timer } from 'rxjs';
+import {
+  catchError,
+  defer,
+  firstValueFrom,
+  from,
+  retry,
+  switchMap,
+  throwError,
+  timer,
+  timeout,
+} from 'rxjs';
 import { financialDecimal } from '../../../core/money/financial-decimal';
+import { isIntegerInRange } from '../../../core/validation/integer-range';
 import type { MarketUpdate } from '../market-producer.types';
 import { ProducerFault } from '../producer-error';
-import { PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';
+import {
+  isGeneratorBatchSize,
+  isGeneratorInstrumentCount,
+  isGeneratorSeed,
+} from './generator-contract';
 
 const ABI_VERSION = 1;
 const RECORD_WIDTH = 7;
 const RECORD_BYTES = RECORD_WIDTH * Int32Array.BYTES_PER_ELEMENT;
-const MAX_BATCH_SIZE = PRODUCER_SETTING_CONSTRAINTS.updatesPerBatch.maximum;
+const WASM_LOAD_DEADLINE_MS = 4_500;
+
+interface GeneratedRecord {
+  readonly instrumentIndex: number;
+  readonly priceCents: number;
+  readonly tradeQuantity: number;
+  readonly bidCents: number;
+  readonly askCents: number;
+  readonly bidQuantity: number;
+  readonly askQuantity: number;
+}
+
+type RecordRule = (record: GeneratedRecord, instrumentCount: number) => boolean;
+
+const RECORD_RULES = Object.values({
+  instrumentInRun: (record, instrumentCount) =>
+    record.instrumentIndex >= 0 && record.instrumentIndex < instrumentCount,
+  positiveTrade: (record) => record.priceCents > 0 && record.tradeQuantity > 0,
+  orderedQuote: (record) => record.bidCents > 0 && record.askCents > record.bidCents,
+  tradeAtQuote: (record) =>
+    record.priceCents === record.bidCents || record.priceCents === record.askCents,
+  nonNegativeBook: (record) => record.bidQuantity >= 0 && record.askQuantity >= 0,
+} satisfies Readonly<Record<string, RecordRule>>);
+
+function isOutputSlice(pointer: number, byteCount: number, bufferBytes: number): boolean {
+  const withinMemory = isIntegerInRange(pointer, {
+    minimum: 0,
+    maximum: bufferBytes - byteCount,
+  });
+  const aligned = pointer % Int32Array.BYTES_PER_ELEMENT === 0;
+  return withinMemory && aligned;
+}
 
 interface GeneratorExports {
   readonly memory: WebAssembly.Memory;
   readonly initialize: (instrumentCount: number, seed: number) => number;
   readonly generateBatch: (batchSize: number) => number;
+}
+
+interface RequiredWasmExports {
+  readonly memory: WebAssembly.Memory;
+  readonly abiVersion: () => number;
+  readonly recordWidth: () => number;
+  readonly initialize: (instrumentCount: number, seed: number) => number;
+  readonly generateBatch: (batchSize: number) => number;
+}
+
+const REQUIRED_FUNCTION_EXPORTS = [
+  'abiVersion',
+  'recordWidth',
+  'initialize',
+  'generateBatch',
+] as const;
+
+function hasRequiredExports(
+  exports: WebAssembly.Exports,
+): exports is WebAssembly.Exports & RequiredWasmExports {
+  return (
+    REQUIRED_FUNCTION_EXPORTS.every((name) => typeof exports[name] === 'function') &&
+    exports['memory'] instanceof WebAssembly.Memory
+  );
 }
 
 export class WasmFetchFault extends ProducerFault {
@@ -35,18 +105,11 @@ export class MarketGenerator implements GeneratorPort {
   constructor(private readonly wasm: GeneratorExports) {}
 
   initialize(instrumentCount: number, seed: number): void {
-    if (
-      !Number.isInteger(instrumentCount) ||
-      instrumentCount < 1 ||
-      instrumentCount > PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum ||
-      !Number.isInteger(seed) ||
-      seed < 1 ||
-      seed > 0xffff_ffff
-    ) {
+    this.instrumentCount = 0;
+    if (!isGeneratorInstrumentCount(instrumentCount) || !isGeneratorSeed(seed)) {
       throw new ProducerFault('protocol');
     }
 
-    this.instrumentCount = 0;
     try {
       if (this.wasm.initialize(instrumentCount, seed) !== 0) {
         throw new ProducerFault('wasm-abi');
@@ -59,12 +122,7 @@ export class MarketGenerator implements GeneratorPort {
   }
 
   generateBatch(batchSize: number): readonly MarketUpdate[] {
-    if (
-      this.instrumentCount === 0 ||
-      !Number.isInteger(batchSize) ||
-      batchSize < 1 ||
-      batchSize > MAX_BATCH_SIZE
-    ) {
+    if (this.instrumentCount === 0 || !isGeneratorBatchSize(batchSize)) {
       throw new ProducerFault('protocol');
     }
 
@@ -77,12 +135,7 @@ export class MarketGenerator implements GeneratorPort {
 
     const buffer = this.wasm.memory.buffer;
     const byteCount = batchSize * RECORD_BYTES;
-    if (
-      !Number.isSafeInteger(pointer) ||
-      pointer < 0 ||
-      pointer % Int32Array.BYTES_PER_ELEMENT !== 0 ||
-      pointer + byteCount > buffer.byteLength
-    ) {
+    if (!isOutputSlice(pointer, byteCount, buffer.byteLength)) {
       throw new ProducerFault('wasm-abi', {
         expected: 'an aligned pointer to the complete output batch',
         observed: { pointer, byteCount, memoryBytes: buffer.byteLength },
@@ -93,48 +146,32 @@ export class MarketGenerator implements GeneratorPort {
     const updates: MarketUpdate[] = [];
     for (let record = 0; record < batchSize; record++) {
       const offset = record * RECORD_BYTES;
-      const instrumentIndex = view.getInt32(offset, true);
-      const priceCents = view.getInt32(offset + 4, true);
-      const tradeQuantity = view.getInt32(offset + 8, true);
-      const bidCents = view.getInt32(offset + 12, true);
-      const askCents = view.getInt32(offset + 16, true);
-      const bidQuantity = view.getInt32(offset + 20, true);
-      const askQuantity = view.getInt32(offset + 24, true);
+      const decoded: GeneratedRecord = {
+        instrumentIndex: view.getInt32(offset, true),
+        priceCents: view.getInt32(offset + 4, true),
+        tradeQuantity: view.getInt32(offset + 8, true),
+        bidCents: view.getInt32(offset + 12, true),
+        askCents: view.getInt32(offset + 16, true),
+        bidQuantity: view.getInt32(offset + 20, true),
+        askQuantity: view.getInt32(offset + 24, true),
+      };
 
-      if (
-        instrumentIndex < 0 ||
-        instrumentIndex >= this.instrumentCount ||
-        priceCents <= 0 ||
-        tradeQuantity <= 0 ||
-        bidCents <= 0 ||
-        askCents <= bidCents ||
-        (priceCents !== bidCents && priceCents !== askCents) ||
-        bidQuantity < 0 ||
-        askQuantity < 0
-      ) {
+      if (!RECORD_RULES.every((rule) => rule(decoded, this.instrumentCount))) {
         throw new ProducerFault('invalid-update', {
           record,
           expected: 'a valid trade and bid/ask snapshot',
-          observed: {
-            instrumentIndex,
-            priceCents,
-            tradeQuantity,
-            bidCents,
-            askCents,
-            bidQuantity,
-            askQuantity,
-          },
+          observed: decoded,
         });
       }
 
       updates.push({
-        instrumentIndex,
-        priceCents: financialDecimal(priceCents),
-        tradeQuantity: BigInt(tradeQuantity),
-        bidCents: financialDecimal(bidCents),
-        askCents: financialDecimal(askCents),
-        bidQuantity: BigInt(bidQuantity),
-        askQuantity: BigInt(askQuantity),
+        instrumentIndex: decoded.instrumentIndex,
+        priceCents: financialDecimal(decoded.priceCents),
+        tradeQuantity: BigInt(decoded.tradeQuantity),
+        bidCents: financialDecimal(decoded.bidCents),
+        askCents: financialDecimal(decoded.askCents),
+        bidQuantity: BigInt(decoded.bidQuantity),
+        askQuantity: BigInt(decoded.askQuantity),
       });
     }
     return updates;
@@ -172,40 +209,39 @@ export async function loadMarketGenerator(
         delay: (error: WasmFetchFault, retryCount) =>
           error.retryable && !signal?.aborted ? timer(100 * retryCount) : throwError(() => error),
       }),
+      timeout({
+        first: WASM_LOAD_DEADLINE_MS,
+        with: () => throwError(() => new WasmFetchFault(false, new Error('Wasm load timed out'))),
+      }),
     ),
   );
 
   let instance: WebAssembly.Instance;
   try {
-    ({ instance } = await WebAssembly.instantiate(bytes, {
-      env: {
-        abort: () => {
-          throw new Error('Wasm runtime aborted');
-        },
-      },
-    }));
+    ({ instance } = await firstValueFrom(
+      from(
+        WebAssembly.instantiate(bytes, {
+          env: {
+            abort: () => {
+              throw new Error('Wasm runtime aborted');
+            },
+          },
+        }),
+      ).pipe(
+        timeout({
+          first: WASM_LOAD_DEADLINE_MS,
+        }),
+      ),
+    ));
   } catch (error: unknown) {
     throw new ProducerFault('wasm-instantiate', error);
   }
 
   const exports = instance.exports;
-  const abiVersion = exports['abiVersion'];
-  const recordWidth = exports['recordWidth'];
-  const initialize = exports['initialize'];
-  const generateBatch = exports['generateBatch'];
-  const memory = exports['memory'];
-  if (
-    typeof abiVersion !== 'function' ||
-    typeof recordWidth !== 'function' ||
-    typeof initialize !== 'function' ||
-    typeof generateBatch !== 'function' ||
-    !(memory instanceof WebAssembly.Memory)
-  ) {
-    throw new ProducerFault('wasm-abi');
-  }
+  if (!hasRequiredExports(exports)) throw new ProducerFault('wasm-abi');
 
   try {
-    if (abiVersion() !== ABI_VERSION || recordWidth() !== RECORD_WIDTH) {
+    if (exports.abiVersion() !== ABI_VERSION || exports.recordWidth() !== RECORD_WIDTH) {
       throw new ProducerFault('wasm-abi');
     }
   } catch (error: unknown) {
@@ -213,8 +249,8 @@ export async function loadMarketGenerator(
   }
 
   return new MarketGenerator({
-    memory,
-    initialize: (instrumentCount, seed) => Number(initialize(instrumentCount, seed)),
-    generateBatch: (batchSize) => Number(generateBatch(batchSize)),
+    memory: exports.memory,
+    initialize: (instrumentCount, seed) => Number(exports.initialize(instrumentCount, seed)),
+    generateBatch: (batchSize) => Number(exports.generateBatch(batchSize)),
   });
 }

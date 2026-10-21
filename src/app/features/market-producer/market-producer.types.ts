@@ -1,5 +1,6 @@
 import type Decimal from 'decimal.js';
 import type { DecimalString } from '../../core/money/financial-decimal';
+import { isIntegerInRange } from '../../core/validation/integer-range';
 import { PRODUCER_SETTING_CONSTRAINTS } from './producer-settings';
 
 export type ProducerStatus = 'initializing' | 'running' | 'paused' | 'error';
@@ -58,7 +59,7 @@ export interface SerializedInstrumentMetricSnapshot {
 
 export function instrumentSymbol(instrumentIndex: number): string {
   const maximum = PRODUCER_SETTING_CONSTRAINTS.instrumentCount.maximum;
-  if (!Number.isInteger(instrumentIndex) || instrumentIndex < 0 || instrumentIndex >= maximum) {
+  if (!isIntegerInRange(instrumentIndex, { minimum: 0, maximum: maximum - 1 })) {
     throw new RangeError(
       `Instrument index must be an integer from 0 to ${maximum - 1}: ${instrumentIndex}`,
     );

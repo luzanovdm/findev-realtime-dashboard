@@ -4,6 +4,7 @@ import {
   isProducerSettings,
 } from '../market-producer/producer-settings';
 import type { ProducerSettingName, ProducerSettings } from '../market-producer/producer-settings';
+import { isIntegerInRange } from '../../core/validation/integer-range';
 
 export type SettingsDraft = Readonly<Record<ProducerSettingName, string>>;
 
@@ -27,7 +28,7 @@ export function draftFieldError(field: ProducerSettingName, rawValue: string): s
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) return 'Enter a whole number.';
   const { minimum, maximum } = PRODUCER_SETTING_CONSTRAINTS[field];
-  if (parsed < minimum || parsed > maximum) {
+  if (!isIntegerInRange(parsed, { minimum, maximum })) {
     return `Enter a value from ${minimum} to ${maximum}.`;
   }
   return null;

@@ -18,10 +18,12 @@ import {
   startWith,
   Subject,
   switchMap,
+  tap,
   takeWhile,
   timer,
 } from 'rxjs';
-import type { Observable, SchedulerLike } from 'rxjs';
+import type { Observable, SchedulerLike, Subscription } from 'rxjs';
+import { isPositiveSafeInteger } from '../../../core/validation/integer-range';
 import {
   accumulateMetricBatch,
   createMetricState,
@@ -122,6 +124,13 @@ const INITIAL_EMISSION_STATE: EmissionState = { failedRunId: null, event: null }
 
 export class ProducerController {
   private readonly input = new Subject<unknown>();
+  private readonly subscription: Subscription;
+  private currentRunId = 0;
+  private disposed = false;
+
+  get isDisposed(): boolean {
+    return this.disposed;
+  }
 
   constructor(private readonly dependencies: ControllerDependencies) {
     const commands = this.input.pipe(map(decodeCommand), share());
@@ -133,9 +142,10 @@ export class ProducerController {
           return of({ type: 'run-error', runId, code: 'protocol' } as const);
         }),
     } satisfies TransitionStreams;
-    commands
+    this.subscription = commands
       .pipe(
         scan((state, input) => routeCommand(state, input, transitions), INITIAL_ROUTE_STATE),
+        tap((state) => (this.currentRunId = state.currentRunId)),
         takeWhile((state) => !state.disposed, true),
         filter(
           (state): state is RouteState & { transition: Observable<ProducerWorkerEvent> } =>
@@ -149,11 +159,46 @@ export class ProducerController {
         ),
         map((state) => state.event),
       )
-      .subscribe((event) => dependencies.emit(event));
+      .subscribe({
+        next: (event) => {
+          try {
+            dependencies.emit(event);
+          } catch (cause: unknown) {
+            this.reportFailure({
+              code: 'generation',
+              runId: event.runId,
+              stage: 'generation',
+              cause,
+            });
+            this.dispose();
+          }
+        },
+        error: (cause: unknown) => {
+          const runId = this.currentRunId;
+          if (runId > 0) {
+            this.reportFailure({ code: 'protocol', runId, stage: 'command', cause });
+            try {
+              dependencies.emit({ type: 'run-error', runId, code: 'protocol' });
+            } catch {
+              // A disconnected event channel cannot deliver the fallback either.
+            }
+          }
+          this.dispose();
+        },
+        complete: () => this.dispose(),
+      });
   }
 
   dispatch(value: unknown): void {
+    if (this.disposed) return;
     this.input.next(value);
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.subscription.unsubscribe();
+    this.input.complete();
   }
 
   private run(
@@ -274,7 +319,7 @@ function decodeCommand(value: unknown): CommandInput {
   const runId = value.runId;
   return {
     kind: 'malformed',
-    runId: typeof runId === 'number' && Number.isSafeInteger(runId) && runId >= 1 ? runId : null,
+    runId: isPositiveSafeInteger(runId) ? runId : null,
   };
 }
 

@@ -11,14 +11,18 @@ const controller = new ProducerController({
   timestampMs: () => Date.now(),
 });
 
-addEventListener('message', ({ data }: MessageEvent<unknown>) => {
+function receive({ data }: MessageEvent<unknown>): void {
   controller.dispatch(data);
-});
+  if (controller.isDisposed) removeEventListener('message', receive);
+}
+
+addEventListener('message', receive);
 
 function send(response: ProducerWorkerEvent): void {
   try {
     postMessage(response);
   } catch {
-    controller.dispatch({ type: 'dispose', runId: response.runId });
+    controller.dispose();
+    removeEventListener('message', receive);
   }
 }

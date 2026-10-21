@@ -225,7 +225,62 @@ describe('ProducerController', () => {
     expect(h.reportFailure).toHaveBeenCalledTimes(1);
     h.controller.dispatch({ type: 'dispose', runId: 1 });
     h.controller.dispatch({ type: 'dispose', runId: 1 });
+    expect(h.controller.isDisposed).toBe(true);
     h.advanceBy(200);
     expect(h.generator.generateBatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts a pending load and closes its command stream on explicit disposal', () => {
+    const h = harness();
+    h.load.mockImplementation(() => new Promise<GeneratorPort>(() => {}));
+    h.controller.dispatch(start(1));
+    const signal = h.load.mock.calls[0][1];
+
+    h.controller.dispose();
+    h.controller.dispose();
+    h.controller.dispatch(start(2));
+
+    expect(signal.aborted).toBe(true);
+    expect(h.controller.isDisposed).toBe(true);
+    expect(h.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains a disconnected event channel and stops the active command stream', () => {
+    const reportFailure = vi.fn();
+    const load = vi.fn();
+    const controller = new ProducerController({
+      load,
+      emit: () => {
+        throw new Error('channel disconnected');
+      },
+      reportFailure,
+      now: () => 0,
+      timestampMs: () => 0,
+    });
+
+    expect(() => controller.dispatch(start(1))).not.toThrow();
+    expect(controller.isDisposed).toBe(true);
+    expect(load).not.toHaveBeenCalled();
+    expect(reportFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'generation', runId: 1, stage: 'generation' }),
+    );
+  });
+
+  it('reports an unexpected command-stream exception and aborts the pending load', () => {
+    const h = harness();
+    h.load.mockImplementation(() => new Promise<GeneratorPort>(() => {}));
+    h.controller.dispatch(start(1));
+    const signal = h.load.mock.calls[0][1];
+
+    h.controller.dispatch({
+      runId: 1,
+      get type() {
+        throw new Error('unreadable command');
+      },
+    });
+
+    expect(h.events).toContainEqual({ type: 'run-error', runId: 1, code: 'protocol' });
+    expect(h.controller.isDisposed).toBe(true);
+    expect(signal.aborted).toBe(true);
   });
 });

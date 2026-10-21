@@ -1,0 +1,30 @@
+body {
+  margin: 0;
+  background: var(--tui-background-base);
+  color: var(--tui-text-primary);
+  font: var(--tui-typography-body-m);
+}
+h1 {
+  margin: 0;
+  font: var(--tui-typography-heading-h3);
+}
+h2 {
+  margin: 1rem 0;
+  font: var(--tui-typography-heading-h6);
+}
+.page-description,
+.placeholder p {
+  color: var(--tui-text-secondary);
+}
+.page-description {
+  margin: 0.5rem 0 2rem;
+}
+.placeholder {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  border: 1px dashed var(--tui-border-normal);
+  border-radius: var(--tui-radius-l);
+}
+.placeholder tui-icon {
+  color: var(--tui-text-tertiary);
+}

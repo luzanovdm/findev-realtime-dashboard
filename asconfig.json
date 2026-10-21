@@ -1,0 +1,10 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "public/wasm/scaffold.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 1
+    }
+  },
+  "options": { "runtime": "stub" }
+}

@@ -1,0 +1,31 @@
+<tui-root>
+  <div class="shell">
+    <header class="header">
+      <a class="brand" routerLink="/dashboard">Findev <span>Realtime dashboard</span></a>
+      <span tuiBadge appearance="neutral">Scaffold</span>
+    </header>
+    <nav class="navigation" aria-label="Main navigation">
+      <a
+        tuiButton
+        size="s"
+        appearance="flat"
+        routerLink="/dashboard"
+        routerLinkActive="active"
+        ariaCurrentWhenActive="page"
+        iconStart="@tui.layout-dashboard"
+        >Dashboard</a
+      >
+      <a
+        tuiButton
+        size="s"
+        appearance="flat"
+        routerLink="/settings"
+        routerLinkActive="active"
+        ariaCurrentWhenActive="page"
+        iconStart="@tui.settings"
+        >Settings</a
+      >
+    </nav>
+    <main id="main-content"><router-outlet /></main>
+  </div>
+</tui-root>

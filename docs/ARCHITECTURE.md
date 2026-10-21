@@ -184,6 +184,14 @@ the module allocation-free after instantiation, so the non-collecting stub runti
 per-batch garbage. A build inspection and repeated-generation test are required before this choice is
 accepted as verified.
 
+The Phase 0 compiled-module spike (`tests/wasm-abi.test.mjs`) verified ABI 1, seven-field records,
+i32-aligned output covering 1,000 records, one reused pointer, and flat 64 KiB memory across 1,000
+maximum-size calls. The emitted 281-byte module has no imports. The scaffold worker still loaded the
+asset over HTTP as `application/wasm`. In local Headless Chrome 155, a Web Worker round-tripped
+`9007199254740993n` exactly, and the browser instantiated the Wasm asset. This verifies the current
+ABI and browser boundary. The baseline production build reported 410.22 kB raw initial chunks before
+the generator was added. The generator hot path still needs its own allocation and behavior tests.
+
 ### 6.2 Exported ABI
 
 The ABI is versioned and deliberately primitive:
@@ -235,8 +243,21 @@ For each update, Wasm:
 6. Generates a positive trade quantity and nonnegative book quantities.
 7. Writes the record and retains the evolved price for the next call.
 
-Exact bounds and the PRNG algorithm become ABI-adjacent constants in the Wasm source and its tests.
-They must not be duplicated as independent rules in Angular.
+The generator uses `xorshift32` (`x ^= x << 13`, `x ^= x >>> 17`, `x ^= x << 5`). A zero
+seed is normalized to `0x6D2B79F5` before the first step. The constants and selected bounds are:
+
+| Quantity                 | Bound or rule                                        |
+| ------------------------ | ---------------------------------------------------- |
+| Initial reference price  | 5,000–15,000 cents, inclusive                        |
+| Reference price          | Clamp to 100–1,000,000,000 cents after each movement |
+| Per-trade price movement | Uniform integer from −5 to +5 cents                  |
+| Bid and ask              | Bid equals reference; ask is bid plus 1–20 cents     |
+| Trade price              | One of the current bid or ask                        |
+| Trade quantity           | Uniform integer from 1–100 units                     |
+| Bid and ask quantities   | Independent uniform integers from 0–1,000 units      |
+
+The maximum ask is 1,000,000,020 cents, below signed `i32` maximum. These rules belong in Wasm source
+and its compiled-module tests; Angular must not duplicate them as independent generation rules.
 
 ## 7. Worker design
 

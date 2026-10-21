@@ -45,3 +45,6 @@ Thumbs.db
 
 # Generated AssemblyScript output
 /public/wasm/
+
+# Playwright CLI session artifacts
+/.playwright-cli/

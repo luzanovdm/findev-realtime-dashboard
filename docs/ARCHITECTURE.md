@@ -70,6 +70,8 @@ src/app/
   app.ts                       application composition and eager producer startup
   app-error.ts                 application-wide unexpected-error fallback
   app.routes.ts                route composition
+  shared/
+    is-record.ts               domain-neutral runtime object guard
   features/
     market-producer/           live-market production capability
       market-producer.facade.ts public Angular facade; the feature's public entry point
@@ -108,6 +110,8 @@ Dependency rules:
 - `app` composes features and routes; it contains no market rules.
 - `assembly` is a separate compilation boundary and cannot import application TypeScript.
 - Cross-feature imports never reach private worker or Wasm adapter files.
+- `shared` contains only domain-neutral primitives used across boundaries; market rules stay in their
+  owning feature.
 
 No `core` directory is planned. If a genuinely application-wide policy appears later, its name must
 describe that policy rather than its technical type.

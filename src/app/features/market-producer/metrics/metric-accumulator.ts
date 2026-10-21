@@ -1,6 +1,6 @@
 import type Decimal from 'decimal.js';
 import { FinancialDecimal, financialDecimal, toNullableDecimalString } from './financial-decimal';
-import { isRecord } from '../is-record';
+import { isRecord } from '../../../shared/is-record';
 import type {
   InstrumentMetricSnapshot,
   MarketUpdate,

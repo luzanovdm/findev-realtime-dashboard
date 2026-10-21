@@ -3,7 +3,7 @@ import type {
   ProducerStatus,
   SerializedInstrumentMetricSnapshot,
 } from '../market-producer.types';
-import { isRecord } from '../is-record';
+import { isRecord } from '../../../shared/is-record';
 import { financialDecimal, isDecimalString } from '../metrics/financial-decimal';
 import { isProducerErrorCode } from '../producer-error';
 import { isProducerSettings, PRODUCER_SETTING_CONSTRAINTS } from '../producer-settings';

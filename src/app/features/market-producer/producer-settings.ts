@@ -1,4 +1,4 @@
-import { isRecord } from './is-record';
+import { isRecord } from '../../shared/is-record';
 
 export interface ProducerSettingConstraint {
   readonly minimum: number;

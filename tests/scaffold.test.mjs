@@ -52,7 +52,7 @@ test(
         const [message] = await reply;
         assert.equal(message.type, expectedType);
         if (expectedType === 'smoke-ok') assert.equal(message.value, 42);
-        else assert.match(message.message, /HTTP 404/);
+        else assert.equal(message.code, 'wasm-fetch');
       } finally {
         await worker.terminate();
       }

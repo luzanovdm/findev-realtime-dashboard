@@ -1,10 +1,10 @@
 import type {
-  ProducerError,
   ProducerErrorCode,
   ProducerStatus,
   SerializedInstrumentMetricSnapshot,
 } from './market-producer.types';
 import { financialDecimal, isDecimalString } from './financial-decimal';
+import { isProducerErrorCode } from './producer-error';
 import { isProducerSettings } from './producer-settings';
 import type { ProducerSettings } from './producer-settings';
 
@@ -54,7 +54,7 @@ export interface StatusChangedEvent {
 export interface RunErrorEvent {
   readonly type: 'run-error';
   readonly runId: number;
-  readonly error: ProducerError;
+  readonly code: ProducerErrorCode;
 }
 
 export type ProducerWorkerEvent =
@@ -91,7 +91,7 @@ export function isProducerWorkerEvent(value: unknown): value is ProducerWorkerEv
     case 'status-changed':
       return isProducerStatus(value['status']);
     case 'run-error':
-      return isProducerError(value['error']);
+      return isProducerErrorCode(value['code']);
     default:
       return false;
   }
@@ -127,26 +127,6 @@ function isInstrumentSymbol(value: unknown): value is string {
 
   const sequence = Number(match[1]);
   return sequence >= 1 && sequence <= 50;
-}
-
-function isProducerError(value: unknown): value is ProducerError {
-  return (
-    isRecord(value) &&
-    isProducerErrorCode(value['code']) &&
-    typeof value['message'] === 'string' &&
-    value['message'].trim().length > 0
-  );
-}
-
-function isProducerErrorCode(value: unknown): value is ProducerErrorCode {
-  return (
-    value === 'worker-unavailable' ||
-    value === 'wasm-fetch' ||
-    value === 'wasm-instantiate' ||
-    value === 'wasm-abi' ||
-    value === 'protocol' ||
-    value === 'generation'
-  );
 }
 
 function isProducerStatus(value: unknown): value is ProducerStatus {
@@ -186,4 +166,4 @@ export interface SmokeRequest {
 
 export type SmokeResponse =
   | { readonly type: 'smoke-ok'; readonly value: number }
-  | { readonly type: 'smoke-error'; readonly message: string };
+  | { readonly type: 'smoke-error'; readonly code: ProducerErrorCode };

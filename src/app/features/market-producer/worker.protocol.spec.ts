@@ -55,7 +55,7 @@ describe('producer worker protocol', () => {
       isProducerWorkerEvent({
         type: 'run-error',
         runId: 1,
-        error: { code: 'generation', message: 'Generation failed' },
+        code: 'generation',
       }),
     ).toBe(true);
   });
@@ -69,7 +69,7 @@ describe('producer worker protocol', () => {
     { type: 'snapshot', runId: 1, metrics: [{ ...validMetric, instrument: 'ASSET-51' }] },
     { type: 'snapshot', runId: 1, metrics: [validMetric, validMetric] },
     { type: 'status-changed', runId: 1, status: 'stopped' },
-    { type: 'run-error', runId: 1, error: { code: 'unknown', message: 'Failure' } },
+    { type: 'run-error', runId: 1, code: 'unknown' },
     { type: 'run-error', runId: 1, error: { code: 'generation', message: '' } },
     { type: 'snapshot', runId: 0, metrics: [] },
   ])('rejects an invalid event: %o', (event) => {

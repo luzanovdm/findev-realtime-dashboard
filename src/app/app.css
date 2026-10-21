@@ -31,6 +31,21 @@
   background: var(--tui-background-accent-1);
   color: var(--tui-text-primary-on-accent-1);
 }
+.startup-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.75rem;
+  color: var(--tui-text-negative);
+}
+.startup-error p {
+  margin: 0;
+}
 @media (max-width: 40rem) {
   .shell {
     padding: 1.5rem 1rem;

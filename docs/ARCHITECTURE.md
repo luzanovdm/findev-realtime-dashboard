@@ -270,7 +270,7 @@ The event protocol is a closed union:
 - `run-started`: `runId`, active settings;
 - `snapshot`: `runId`, metric rows;
 - `status-changed`: `runId`, status;
-- `run-error`: `runId`, error code and safe message.
+- `run-error`: `runId` and a stable error code. The main thread supplies the fixed safe message.
 
 TypeScript interfaces document this protocol; explicit type guards validate it at both message
 boundaries. Unknown message types, invalid settings, and impossible state transitions become protocol

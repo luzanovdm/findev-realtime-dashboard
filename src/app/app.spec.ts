@@ -1,6 +1,7 @@
 import { provideTaiga } from '@taiga-ui/core';
 import { App } from './app';
 import { ScaffoldConnection } from './features/market-producer/scaffold-connection';
+import { ProducerFault } from './features/market-producer/producer-error';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -57,5 +58,36 @@ describe('Scaffold shell', () => {
     expect(fixture.nativeElement.querySelector('tui-root')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('nav a')).toHaveLength(2);
     expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a safe error and retries without losing navigation', async () => {
+    const check = vi
+      .fn()
+      .mockRejectedValueOnce(new ProducerFault('wasm-fetch', new Error('private URL')))
+      .mockResolvedValueOnce(42);
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideRouter(routes),
+        provideTaiga({ mode: 'light' }),
+        { provide: ScaffoldConnection, useValue: { check } },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const alert = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement;
+    expect(alert.textContent).toContain('Market data could not be loaded');
+    expect(alert.textContent).not.toContain('private URL');
+    expect(fixture.nativeElement.querySelectorAll('nav a')).toHaveLength(2);
+
+    (alert.querySelector('button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
   });
 });

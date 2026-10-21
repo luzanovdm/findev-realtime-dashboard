@@ -4,10 +4,26 @@ import type { DecimalString } from './financial-decimal';
 export type ProducerStatus = 'initializing' | 'running' | 'paused' | 'error';
 
 export type ProducerErrorCode =
-  'worker-unavailable' | 'wasm-fetch' | 'wasm-instantiate' | 'wasm-abi' | 'protocol' | 'generation';
+  | 'worker-unavailable'
+  | 'wasm-fetch'
+  | 'wasm-instantiate'
+  | 'worker-crash'
+  | 'worker-timeout'
+  | 'generation'
+  | 'wasm-abi'
+  | 'protocol'
+  | 'invalid-update'
+  | 'metric-failure';
+
+export type ProducerErrorSeverity = 'environment' | 'run-error' | 'integrity-critical';
+export type ProducerDataDisposition = 'hide' | 'stale';
+export type ProducerRecoveryAction = 'none' | 'start-new-run';
 
 export interface ProducerError {
   readonly code: ProducerErrorCode;
+  readonly severity: ProducerErrorSeverity;
+  readonly dataDisposition: ProducerDataDisposition;
+  readonly recoveryAction: ProducerRecoveryAction;
   readonly message: string;
 }
 

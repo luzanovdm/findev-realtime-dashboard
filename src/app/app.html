@@ -26,6 +26,16 @@
         >Settings</a
       >
     </nav>
+    @if (startupError(); as error) {
+      <div class="startup-error" role="alert" aria-live="assertive">
+        <p>{{ error.message }}</p>
+        @if (error.recoveryAction !== 'none') {
+          <button tuiButton type="button" size="s" (click)="retryInitialization()">
+            Retry initialization
+          </button>
+        }
+      </div>
+    }
     <main id="main-content"><router-outlet /></main>
   </div>
 </tui-root>

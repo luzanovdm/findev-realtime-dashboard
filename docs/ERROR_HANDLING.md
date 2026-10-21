@@ -32,7 +32,7 @@ bootstrap failure where the browser still renders the document.
 | ------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Validation         | A settings draft is incomplete or outside the task's integer ranges                           | Do not send Apply; existing run continues                                        | Field-level message; no global error banner                                          |
 | Warning            | Output remains correct, but requested speed or browser scheduling differs from observed speed | Continue; never replay missed intervals                                          | Nonblocking status note after sustained deviation                                    |
-| Run error          | Generation cannot continue, but the last published snapshot is known valid                    | Stop timer and worker work; no automatic continuation of the same run            | Error banner, `Stopped` label and timestamp on retained rows, `Start new run` action |
+| Run error          | Generation cannot continue, but the last published snapshot is known valid                    | Cancel generation subscription; no automatic continuation of the same run        | Error banner, `Stopped` label and timestamp on retained rows, `Start new run` action |
 | Integrity critical | Current-run protocol, ABI, market record, or metric state cannot be trusted                   | Stop before applying or publishing the suspect batch; quarantine current metrics | Error banner, unavailable metrics, `Start new run` action                            |
 
 An unsupported Worker or WebAssembly runtime is a terminal environment error. The application shell
@@ -95,7 +95,7 @@ The catalogue is deliberately finite. Unknown codes and malformed error events a
 - A running worker sends progress with snapshots or a lightweight heartbeat. The facade detects a
   lack of progress while the tab is visible, with a grace period when visibility returns. Hidden-tab
   timer throttling alone is not an error.
-- Pause cancels the next batch before acknowledgement. Resume starts after one full interval. A
+- Pause unsubscribes from the next batch before acknowledgement. Resume starts after one full interval. A
   stopped run never catches up missed intervals.
 
 ## 5. Data trust and transitions
@@ -144,5 +144,5 @@ not flood logs or banners.
 | UI              | English error copy, action availability, keyboard access, `aria-live`, navigation remains usable                                      |
 | Runtime         | Missing Wasm over HTTP, failed worker initialization, visible-tab liveness check, no false failure from a hidden tab                  |
 
-Fault injection uses fake workers and schedulers. No test waits for a real production timeout. The
+Fault injection uses fake workers and a virtual RxJS scheduler. No test waits for a real production timeout. The
 compiled-Wasm and production-worker integration tests remain separate evidence.

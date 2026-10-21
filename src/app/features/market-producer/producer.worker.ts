@@ -6,8 +6,6 @@ import type { ProducerWorkerEvent } from './worker.protocol';
 const controller = new ProducerController({
   load: loadMarketGenerator,
   emit: send,
-  schedule: (callback, delayMs) => setTimeout(callback, delayMs),
-  cancel: (handle) => clearTimeout(handle),
   now: () => performance.now(),
   timestampMs: () => Date.now(),
 });

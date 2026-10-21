@@ -159,13 +159,14 @@ asynchronous behavior.
    - decodes packed records;
    - classifies fetch, compile, ABI, trap, and invalid-record failures with stable codes.
 2. Implement a controller with explicit `initializing`, `running`, `paused`, and `error` transitions.
-3. Implement recursive one-shot scheduling. Schedule only after the current batch is decoded and
-   accumulated.
-4. On Pause, cancel the pending handle before publishing `paused`.
+3. Model commands, run replacement, control modes, generation, and metric accumulation as RxJS
+   streams. Repeat a batch only after the current one is decoded and accumulated.
+4. On Pause, unsubscribe from generation before publishing `paused`.
 5. On Resume, wait one full configured interval and preserve Wasm and metric state.
-6. On Apply, cancel the old timer, reset Wasm and metrics, publish the new `runId`, and produce the
+6. On Apply, cancel the old run stream, reset Wasm and metrics, publish the new `runId`, and produce the
    first batch immediately.
-7. Check `runId` after Wasm fetch/instantiation and at every scheduled callback before publishing.
+7. Use `switchMap` to cancel old loads and scheduled batches; check `runId` before accepting worker
+   events in Angular.
 8. Validate each full batch before accumulator mutation, so a bad late record cannot partially change
    volume or VWAP.
 9. Convert load, ABI, protocol, and generation failures to stable error codes and stop scheduling.
@@ -175,16 +176,16 @@ asynchronous behavior.
 
 ### Tests
 
-- Use a fake scheduler and fake Wasm adapter for controller state tests.
-- Start produces one immediate batch and then schedules one future callback.
+- Use a virtual RxJS scheduler and fake Wasm adapter for controller state tests.
+- Start produces one immediate batch and schedules the next after a full interval.
 - Pause prevents generation after acknowledgement.
 - Resume preserves totals and schedules after a full interval.
 - Repeated Pause or Resume commands are idempotent or rejected according to the documented state
   table; tests lock the chosen behavior.
 - Apply while running or paused cancels the old schedule, clears state, and runs under a higher
   `runId`.
-- Late initialization, scheduled callbacks, and events from an old `runId` are discarded.
-- A thrown adapter error publishes one typed error and leaves no scheduled callback.
+- Late initialization, scheduled batches, and events from an old `runId` are discarded.
+- A thrown adapter error publishes one typed error and leaves no active generation subscription.
 - An invalid last record prevents the entire batch from reaching the accumulator.
 - Tests contain no real waits.
 
@@ -192,7 +193,7 @@ asynchronous behavior.
 
 - Exactly one batch can be active at a time.
 - There is no interval catch-up or queued burst after pause.
-- Controller tests prove stale-run rejection on both asynchronous initialization and timer paths.
+- Controller tests prove stale-run rejection on both asynchronous initialization and generation paths.
 
 ## 5. Phase 4 — Exact metric accumulation and snapshot coalescing
 
@@ -239,14 +240,15 @@ asynchronous behavior.
 1. Implement a root-provided facade and inject it eagerly from the app composition root.
 2. Construct exactly one module worker and resolve the Wasm URL from the document base URI.
 3. Start the default run once during application initialization.
-4. Expose readonly signals for status, active settings, metrics, current run, and error.
+4. Reduce validated events to one observable state and expose readonly signals for status, active
+   settings, metrics, current run, and error.
 5. Implement `pause`, `resume`, and `apply` commands with allowed-state guards.
 6. Clear visible rows immediately when Apply creates a new run.
 7. Validate worker events and reject every noncurrent `runId` before updating signals.
 8. Keep a last confirmed snapshot with a stopped/stale label for run errors; hide metrics after
    integrity-critical errors.
-9. Handle worker `error`, `messageerror`, command timeout, and visible-tab liveness timeout. Terminate
-   a failed worker before constructing another for a new run.
+9. Handle worker `error`, `messageerror`, command timeout, and visible-tab liveness timeout. Use RxJS
+   watchdog streams that cancel on state changes; terminate a failed worker before constructing another.
 10. Terminate and detach the worker on application teardown.
 
 ### Tests
@@ -405,10 +407,10 @@ asynchronous behavior.
 | -------------------------------------- | --------------------------------------- | --------------------------------------------- |
 | Five live metrics per instrument       | Worker accumulator + Dashboard          | Pure metric tests + component rendering tests |
 | Zero/unavailable semantics             | Accumulator + formatters                | Zero-denominator and initial-state tests      |
-| Pause/Resume without catch-up          | Worker controller                       | Fake-scheduler state tests                    |
+| Pause/Resume without catch-up          | Worker controller                       | Virtual-scheduler state tests                 |
 | Validated settings and Apply reset     | Settings + facade + worker              | Validation, command, and reset tests          |
 | Route persistence and one producer     | Root facade                             | Worker-factory and route-lifecycle tests      |
-| Reject previous-run results            | Worker + facade `runId` checks          | Late-init, timer, and event tests             |
+| Reject previous-run results            | Worker + facade `runId` checks          | Late-init, cancellation, and event tests      |
 | Stateful random market updates in Wasm | AssemblyScript module                   | Compiled-Wasm deterministic/invariant tests   |
 | Worker execution                       | Worker loader/controller                | Production worker/Wasm HTTP integration test  |
 | Every trade counted, no history        | Worker accumulator                      | Exact-count and bounded-state tests           |

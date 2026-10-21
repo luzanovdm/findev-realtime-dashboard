@@ -99,10 +99,11 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
   instrument selection, trades, and order-book quantities run in Wasm; compiled-module tests cover
   the ABI, batch sizes, invariants, deterministic seeds, state continuity, and memory stability.
 - `features/market-producer/producer.worker.ts` runs the generator and Decimal metric accumulator
-  through an application-run protocol. It validates batches, schedules generation, and reports typed
-  failures.
-- The application-scoped producer facade owns the worker across route navigation, rejects stale runs,
-  and presents safe errors and recovery actions.
+  through an application-run protocol. RxJS streams cancel superseded runs, fold Pause/Resume modes,
+  pace batches, and report typed failures.
+- The application-scoped producer facade owns the worker across route navigation. It reduces
+  validated events to one state stream, exposes readonly signals, rejects stale runs, and presents
+  safe errors and recovery actions.
 - EditorConfig, Prettier, and VS Code format-on-save settings with recommended extensions.
 
 ## Producer flow

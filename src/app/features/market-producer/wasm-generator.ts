@@ -1,3 +1,4 @@
+import { catchError, defer, firstValueFrom, from, retry, switchMap, throwError, timer } from 'rxjs';
 import { financialDecimal } from './financial-decimal';
 import type { MarketUpdate } from './market-producer.types';
 import { ProducerFault } from './producer-error';
@@ -130,25 +131,29 @@ export async function loadMarketGenerator(
 ): Promise<GeneratorPort> {
   if (typeof WebAssembly === 'undefined') throw new ProducerFault('worker-unavailable');
 
-  let bytes: ArrayBuffer | undefined;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const response = await fetch(url, { signal });
-      if (!response.ok) {
-        const retryable = response.status === 429 || response.status >= 500;
-        throw new WasmFetchFault(retryable, new Error(`HTTP ${response.status}`));
-      }
-      bytes = await response.arrayBuffer();
-      break;
-    } catch (error: unknown) {
-      const fault =
-        error instanceof WasmFetchFault ? error : new WasmFetchFault(!signal?.aborted, error);
-      if (!fault.retryable || attempt === 2 || signal?.aborted) throw fault;
-      await new Promise<void>((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
-    }
-  }
-
-  if (bytes === undefined) throw new ProducerFault('wasm-fetch');
+  const bytes = await firstValueFrom(
+    defer(() => from(fetch(url, { signal }))).pipe(
+      switchMap((response) => {
+        if (!response.ok) {
+          const retryable = response.status === 429 || response.status >= 500;
+          return throwError(
+            () => new WasmFetchFault(retryable, new Error(`HTTP ${response.status}`)),
+          );
+        }
+        return from(response.arrayBuffer());
+      }),
+      catchError((error: unknown) =>
+        throwError(() =>
+          error instanceof WasmFetchFault ? error : new WasmFetchFault(!signal?.aborted, error),
+        ),
+      ),
+      retry({
+        count: 2,
+        delay: (error: WasmFetchFault, retryCount) =>
+          error.retryable && !signal?.aborted ? timer(100 * retryCount) : throwError(() => error),
+      }),
+    ),
+  );
 
   let instance: WebAssembly.Instance;
   try {

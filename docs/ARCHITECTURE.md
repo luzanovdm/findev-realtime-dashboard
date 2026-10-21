@@ -2,7 +2,7 @@
 
 | Field                | Value                                                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Status               | Proposed for implementation                                                                                        |
+| Status               | Runtime implemented locally; verification and deployment pending                                                   |
 | Owner                | Repository maintainer                                                                                              |
 | Version              | 1.0                                                                                                                |
 | Last reviewed        | 2026-10-21                                                                                                         |
@@ -71,14 +71,14 @@ src/app/
   app.routes.ts                route composition
   features/
     market-producer/           live-market production capability
-      market-producer.ts       public Angular facade; the feature's public entry point
+      market-producer.facade.ts public Angular facade; the feature's public entry point
       market-producer.types.ts active settings, status, snapshots, commands
       producer-settings.ts     defaults, limits, and validation rules
-      market-producer.worker.ts
+      producer.worker.ts
+      producer-controller.ts
       worker.protocol.ts
-      wasm-market-generator.ts
+      wasm-generator.ts
       metric-accumulator.ts
-      producer-scheduler.ts
     dashboard/                 observe and control the active run
       dashboard.ts
       market-metric-formatters.ts
@@ -111,7 +111,7 @@ describe that policy rather than its technical type.
 | Owner                   | State and responsibility                                      | Lifetime                             |
 | ----------------------- | ------------------------------------------------------------- | ------------------------------------ |
 | Wasm generator          | PRNG state, current price per instrument, fixed output buffer | One Wasm instance inside the worker  |
-| Worker controller       | Current `runId`, timer, status, active settings, Wasm calls   | One dedicated worker per application |
+| Worker controller       | RxJS run and control streams, Wasm calls, metric fold         | One dedicated worker per application |
 | Metric accumulator      | Decimal quote/trade values, cumulative volume and notional    | Current run only                     |
 | Angular producer facade | Worker ownership, validated event intake, readonly UI signals | Application lifetime                 |
 | Settings route          | Editable draft and validation state                           | Route component lifetime             |
@@ -153,20 +153,20 @@ Command semantics:
 
 - **Initial start:** use default settings, reset all generator and metric state, then generate the
   first batch immediately after initialization.
-- **Pause:** clear the pending timer and acknowledge `paused`; no batch may start after the
+- **Pause:** unsubscribe from pending generation and acknowledge `paused`; no batch may start after the
   acknowledgement.
 - **Resume:** preserve generator and accumulator state and schedule the next batch after one complete
   configured interval. Missed intervals are not replayed.
 - **Apply:** validate settings in Angular, increment `runId`, clear visible metrics, and send an
-  immutable settings snapshot. The worker cancels its timer, resets Wasm and metrics, enters
+  immutable settings snapshot. The worker cancels the prior run stream, resets Wasm and metrics, enters
   `running`, and produces the first batch immediately. Apply always resumes a paused producer.
 - **Error:** stop scheduling. Only a fully validated, last confirmed snapshot may remain visible,
   marked stopped and stale. An integrity failure hides metrics. A valid Apply starts a new run.
-- **Teardown:** clear the timer, remove event handlers, and terminate the worker.
+- **Teardown:** unsubscribe from generation, remove event handlers, and terminate the worker.
 
-The worker checks the current `runId` before and after every asynchronous boundary. The facade also
-rejects events whose `runId` is not the current one. This two-sided check handles a slow Wasm fetch,
-an already queued timer callback, and a late message from the old run.
+The worker's `switchMap` unsubscribes from the previous run at every Apply, aborting a pending Wasm
+fetch and canceling scheduled batches. The facade rejects events whose `runId` is not current. These
+boundaries handle a slow Wasm fetch, an already queued scheduler task, and a late old-run message.
 
 ## 6. Wasm generator boundary
 
@@ -265,19 +265,22 @@ The worker is both an anti-corruption boundary and the data plane. It owns:
 
 - Wasm fetch, instantiation, export validation, and reset;
 - runtime validation of commands and generated records;
-- a recursive one-shot scheduler;
+- RxJS streams for run replacement, control transitions, and paced batches;
 - metric accumulation for every record;
 - snapshot coalescing;
 - typed error conversion.
 
-The scheduler uses recursive `setTimeout`, scheduled only after the previous batch has been processed.
-This prevents overlapping batches and unbounded timer queues. The configured interval is a requested
-minimum delay between completed batch processing and the next batch; actual throughput may be lower
-under load. Pause cancels the pending handle. Resume starts a fresh full interval. No scheduler path
-tries to catch up missed time.
+The worker decodes commands into a stream. `switchMap` replaces the prior run and aborts its pending
+Wasm load. Valid Pause/Resume commands fold into a mode stream with `scan`; switching to paused
+unsubscribes from generation. A batch observable repeats only after the preceding batch and metric
+fold complete, with one configured interval between them. Resume waits a full interval. No stream
+replays missed time or starts overlapping batches. A second `scan` accumulates every update and
+publishes at most one normal snapshot per 100 ms, with a final confirmed snapshot on Pause.
 
-A scheduler interface provides `schedule`, `cancel`, and `now` dependencies to tests. Unit tests drive
-callbacks directly and never wait for real 50–2,000 ms intervals.
+RxJS scheduler injection lets controller tests advance virtual time without waiting for real
+50–2,000 ms intervals. The Angular facade projects validated events through one state reducer into
+readonly signals. Its initialization, command, and liveness watchdogs use `switchMap` to cancel prior
+deadlines; document visibility is an observable input.
 
 The command protocol is a closed union:
 
@@ -425,7 +428,7 @@ preview behavior, and the requirement to make the final repository and demo acce
 | ------------------------- | ---------------------------------------------------------------------------------------------- |
 | Pure domain               | Metric worked example, zero denominators, isolation, settings validation                       |
 | Wasm                      | Compiled module batch size, deterministic seed, state evolution, all record invariants         |
-| Worker controller         | Start, pause, resume, Apply reset, timer cancellation, no catch-up, stale `runId` rejection    |
+| Worker controller         | Start, pause, resume, Apply reset, stream cancellation, no catch-up, stale `runId` rejection   |
 | Protocol                  | Runtime rejection of malformed commands, events, exports, pointers, and records                |
 | Angular facade            | One worker, readonly state projection, route-independent lifecycle, stale event rejection      |
 | Components                | Settings validation/submission and dashboard states/controls/formatting/accessibility hooks    |
@@ -434,7 +437,7 @@ preview behavior, and the requirement to make the final repository and demo acce
 | Deployment                | Public route refresh, Wasm response headers, automatic redeploy from a known commit            |
 
 Angular component tests follow zoneless stabilization: act, await `fixture.whenStable()`, then assert.
-Time-dependent tests use a fake scheduler. Generator tests call the compiled Wasm rather than a
+Time-dependent tests use a virtual RxJS scheduler. Generator tests call the compiled Wasm rather than a
 TypeScript reimplementation.
 
 ## 14. Open implementation checks

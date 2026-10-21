@@ -37,9 +37,9 @@ acceptance gate passes; creating the files alone is not completion.
    - minimum and maximum reference prices;
    - maximum spread, trade quantity, and book quantity;
    - clamp behavior at price boundaries.
-7. Verify that `bigint` values survive worker structured cloning in the supported browser baseline.
-   If they do not, use decimal strings only at the worker event boundary while keeping exact `bigint`
-   accumulation inside the worker.
+7. Verify that `bigint` volume values survive worker structured cloning in the supported browser
+   baseline. Keep all monetary and ratio values in `decimal.js`; serialize them as canonical decimal
+   strings at the worker boundary and reconstruct `Decimal` instances in Angular.
 8. Record a baseline production build size and confirm that the built worker can load Wasm over HTTP
    with `application/wasm`.
 
@@ -74,7 +74,8 @@ asynchronous behavior.
 
 1. Define `ProducerSettings`, defaults, limits, and a pure validator in `market-producer` ownership.
    Keep the Settings route responsible only for the editable draft and presentation.
-2. Define public `ProducerStatus`, `InstrumentMetricSnapshot`, and safe error types.
+2. Define public `ProducerStatus`, Decimal-backed `InstrumentMetricSnapshot`, serialized worker metric
+   contracts, and safe error types.
 3. Define closed worker command and event unions carrying `runId`.
 4. Add runtime type guards for every command and event. Reject unknown keys only where strictness adds
    safety; always reject invalid discriminants, values, and ranges.
@@ -186,7 +187,8 @@ asynchronous behavior.
 ### Work
 
 1. Implement a pure accumulator keyed by instrument index.
-2. Store latest trade/quote fields, cumulative `bigint` volume, and cumulative `bigint` notional.
+2. Store latest trade/quote fields and cumulative notional as `Decimal`; store cumulative volume as
+   `bigint`.
 3. Derive last price, spread, VWAP, and imbalance with explicit unavailable values.
 4. Reset the accumulator only on a new run.
 5. Integrate the accumulator into the worker before any snapshot throttling.
@@ -210,7 +212,8 @@ asynchronous behavior.
 ### Acceptance gate
 
 - The worker retains O(instrument count) state and no update history.
-- Cumulative integers remain exact beyond `Number.MAX_SAFE_INTEGER` in a focused accumulator test.
+- Monetary calculations never convert through binary floating point; high-volume cumulative values
+  remain exact within the configured Decimal precision.
 - Maximum-rate input produces at most 10 UI snapshots per second under the fake clock.
 
 ## 6. Phase 5 — Application-scoped producer facade
@@ -287,7 +290,7 @@ asynchronous behavior.
 1. Render one semantic table row per active instrument in stable symbol order.
 2. Show last price, spread, cumulative volume, VWAP, and imbalance.
 3. Add pure display formatters:
-   - integer cents to locale currency with two decimals;
+   - Decimal cents to locale currency with two decimals using explicit decimal rounding;
    - `bigint` volume to grouped units;
    - imbalance to a fixed readable precision without escaping `[-1, 1]`;
    - `null` to an em dash.

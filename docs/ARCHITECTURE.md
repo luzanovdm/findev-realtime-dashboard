@@ -107,14 +107,14 @@ describe that policy rather than its technical type.
 
 ## 4. Runtime ownership
 
-| Owner                   | State and responsibility                                        | Lifetime                             |
-| ----------------------- | --------------------------------------------------------------- | ------------------------------------ |
-| Wasm generator          | PRNG state, current price per instrument, fixed output buffer   | One Wasm instance inside the worker  |
-| Worker controller       | Current `runId`, timer, status, active settings, Wasm calls     | One dedicated worker per application |
-| Metric accumulator      | Latest quote/trade values, exact cumulative volume and notional | Current run only                     |
-| Angular producer facade | Worker ownership, validated event intake, readonly UI signals   | Application lifetime                 |
-| Settings route          | Editable draft and validation state                             | Route component lifetime             |
-| Dashboard route         | Table and control presentation                                  | Route component lifetime             |
+| Owner                   | State and responsibility                                      | Lifetime                             |
+| ----------------------- | ------------------------------------------------------------- | ------------------------------------ |
+| Wasm generator          | PRNG state, current price per instrument, fixed output buffer | One Wasm instance inside the worker  |
+| Worker controller       | Current `runId`, timer, status, active settings, Wasm calls   | One dedicated worker per application |
+| Metric accumulator      | Decimal quote/trade values, cumulative volume and notional    | Current run only                     |
+| Angular producer facade | Worker ownership, validated event intake, readonly UI signals | Application lifetime                 |
+| Settings route          | Editable draft and validation state                           | Route component lifetime             |
+| Dashboard route         | Table and control presentation                                | Route component lifetime             |
 
 The app shell eagerly creates the root-provided producer facade. Route components never construct a
 worker. Destroying and recreating either route therefore preserves the active run and cannot multiply
@@ -277,8 +277,10 @@ errors.
 
 ## 8. Metric model
 
-Metrics are calculated in pure TypeScript inside the worker. This preserves a small Wasm assignment
-surface while ensuring that all high-rate work remains off the main thread.
+Metrics are calculated with `decimal.js` inside the worker. This preserves a small Wasm assignment
+surface, avoids IEEE-754 arithmetic for financial values, and keeps all high-rate work off the main
+thread. Wasm still emits integer cents because that is the required transport format; the worker
+converts those exact integers to `Decimal` at the adapter boundary.
 
 The accumulator keeps one record per instrument and never retains event history:
 
@@ -290,15 +292,17 @@ cumulative trade quantity
 cumulative price-cents × trade-quantity notional
 ```
 
-Cumulative quantity and notional use `bigint` to avoid loss of integer precision during a long or
-high-rate run. Metric snapshots use structured-clone-compatible primitives, including `bigint` for
-volume. Derived values are:
+Cumulative quantity uses `bigint`. Monetary values and cumulative notional use immutable `Decimal`
+instances with an explicit 80-significant-digit context. Worker messages serialize decimals as
+canonical, non-exponential strings because structured cloning does not preserve library class
+instances. The Angular facade validates each string and reconstructs `Decimal` view state. Derived
+values are:
 
 - `lastPriceCents`: latest trade price, or unavailable before the first update;
 - `spreadCents`: latest ask minus latest bid, or unavailable before a quote;
 - `volume`: exact cumulative trade quantity, initially `0n`;
-- `vwapCents`: an unrounded ratio derived from exact notional and volume totals, or unavailable at
-  zero volume;
+- `vwapCents`: an unrounded decimal ratio of cumulative notional to volume, or unavailable at zero
+  volume;
 - `imbalance`: `(bidQuantity - askQuantity) / (bidQuantity + askQuantity)`, or unavailable when the
   denominator is zero.
 
@@ -415,8 +419,8 @@ These are bounded checks, not unresolved architecture ownership:
 
 1. Confirm the final AssemblyScript source has no managed allocation on initialization or generation,
    and retain `stub` only if the soak test shows flat memory.
-2. Verify `bigint` snapshot cloning in the supported local browsers; fall back to a decimal-string
-   boundary without changing accumulator ownership if a target browser fails.
+2. Verify `bigint` volume cloning in the supported local browsers. Decimal values always cross the
+   worker boundary as validated canonical strings.
 3. Measure the 10 Hz snapshot budget at maximum settings and adjust only the coalescing interval if
    rendering exceeds the target.
 4. Select and configure the static host after testing its private-repository connection, SPA rewrite,
@@ -430,3 +434,4 @@ These are bounded checks, not unresolved architecture ownership:
 - [AssemblyScript: Runtime variants and memory layout](https://www.assemblyscript.org/runtime.html)
 - [AssemblyScript: Compiler and module boundary](https://www.assemblyscript.org/compiler.html)
 - [WebAssembly: JavaScript API and linear memory](https://webassembly.org/getting-started/js-api/)
+- [`decimal.js`: arbitrary-precision decimal arithmetic](https://github.com/MikeMcl/decimal.js)

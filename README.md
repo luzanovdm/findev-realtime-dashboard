@@ -149,6 +149,9 @@ Verified on October 21, 2026:
   [Getting started](https://www.assemblyscript.org/getting-started.html). The npm package requires
   Node `>=20` and npm `>=10`. The compiler is installed locally and does not need a separate system
   toolchain.
+- `decimal.js` **10.6.0**:
+  [official repository](https://github.com/MikeMcl/decimal.js). Financial calculations use
+  arbitrary-precision decimal arithmetic instead of binary floating point.
 - [Angular Web Workers](https://angular.dev/ecosystem/web-workers) and
   [Angular Vitest](https://angular.dev/guide/testing).
 

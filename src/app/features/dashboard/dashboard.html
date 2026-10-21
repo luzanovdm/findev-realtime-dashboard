@@ -9,25 +9,12 @@
     [disabled]="!producer.canPause() && !producer.canResume()"
     (click)="toggleGeneration()"
   >
-    {{ producer.status() === 'paused' ? 'Resume' : 'Pause' }}
+    {{ presentation().controlLabel }}
   </button>
 </div>
 
 <p class="producer-status" role="status" aria-live="polite">
-  @switch (producer.status()) {
-    @case ('initializing') {
-      Initializing market data…
-    }
-    @case ('running') {
-      Live updates running.
-    }
-    @case ('paused') {
-      Updates paused. Current values and totals are preserved.
-    }
-    @case ('error') {
-      Market data unavailable.
-    }
-  }
+  {{ presentation().message }}
   @if (producer.stale()) {
     Last confirmed values are outdated.
   }

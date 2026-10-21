@@ -78,6 +78,8 @@ describe('producer worker protocol', () => {
     { ...validSnapshot, metrics: [{ ...validMetric, spreadCents: '-1' }] },
     { ...validSnapshot, metrics: [{ ...validMetric, spreadCents: '0' }] },
     { ...validSnapshot, metrics: [{ ...validMetric, vwapCents: '1e3' }] },
+    { ...validSnapshot, metrics: [{ ...validMetric, vwapCents: '1'.repeat(129) }] },
+    { ...validSnapshot, metrics: [{ ...validMetric, imbalance: `0.${'0'.repeat(129)}1` }] },
     { ...validSnapshot, metrics: [{ ...validMetric, instrument: 'ASSET-51' }] },
     { ...validSnapshot, metrics: [validMetric, validMetric] },
     { type: 'status-changed', runId: 1, status: 'stopped' },
@@ -94,5 +96,14 @@ describe('producer worker protocol', () => {
 
     expect(event.metrics[0]?.volume).toBe(40n);
     expect(isProducerWorkerEvent(event)).toBe(true);
+  });
+
+  it('accepts a bounded high-precision decimal snapshot', () => {
+    expect(
+      isProducerWorkerEvent({
+        ...validSnapshot,
+        metrics: [{ ...validMetric, imbalance: `0.${'3'.repeat(80)}` }],
+      }),
+    ).toBe(true);
   });
 });

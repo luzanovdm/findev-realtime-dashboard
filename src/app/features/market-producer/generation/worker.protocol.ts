@@ -4,6 +4,7 @@ import type {
   SerializedInstrumentMetricSnapshot,
 } from '../market-producer.types';
 import { financialDecimal, isDecimalString } from '../../../core/money/financial-decimal';
+import type { DecimalString } from '../../../core/money/financial-decimal';
 import { isRecord } from '../../../core/validation/is-record';
 import {
   isNonNegativeSafeInteger,
@@ -78,6 +79,8 @@ type RecordValue = Readonly<Record<string, unknown>>;
 type ValueGuard = (value: unknown) => boolean;
 type RecordGuard = (value: RecordValue) => boolean;
 type FieldGuards = readonly (readonly [string, ValueGuard])[];
+// The generator's bounded prices and 80-digit Decimal ratios fit within this wire limit.
+const MAX_SERIALIZED_DECIMAL_LENGTH = 128;
 
 const START_FIELDS: FieldGuards = Object.entries({
   settings: isProducerSettings,
@@ -180,13 +183,21 @@ function isProducerStatus(value: unknown): value is ProducerStatus {
 
 function isNullablePositiveDecimal(value: unknown): boolean {
   if (value === null) return true;
-  return isDecimalString(value) && financialDecimal(value).greaterThan(0);
+  return isBoundedDecimalString(value) && financialDecimal(value).greaterThan(0);
 }
 
 function isNullableImbalance(value: unknown): boolean {
   if (value === null) return true;
-  if (!isDecimalString(value)) return false;
+  if (!isBoundedDecimalString(value)) return false;
 
   const imbalance = financialDecimal(value);
   return imbalance.greaterThanOrEqualTo(-1) && imbalance.lessThanOrEqualTo(1);
+}
+
+function isBoundedDecimalString(value: unknown): value is DecimalString {
+  return (
+    typeof value === 'string' &&
+    value.length <= MAX_SERIALIZED_DECIMAL_LENGTH &&
+    isDecimalString(value)
+  );
 }

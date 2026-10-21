@@ -1,20 +1,26 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { TuiIcon } from '@taiga-ui/core';
-import { TuiBadge } from '@taiga-ui/kit';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { TuiButton } from '@taiga-ui/core';
+import { MarketProducerFacade } from '../market-producer/market-producer.facade';
+import { formatCurrencyCents, formatImbalance, formatVolume } from './market-metric-formatters';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [TuiBadge, TuiIcon],
-  template: `
-    <h1>Dashboard</h1>
-    <p class="page-description">Live market dashboard</p>
-    <section class="placeholder" aria-labelledby="dashboard-placeholder">
-      <tui-icon icon="@tui.chart-no-axes-combined" />
-      <h2 id="dashboard-placeholder">Instrument table</h2>
-      <span tuiBadge appearance="neutral">Not implemented</span>
-      <p>TODO: Add market updates, metrics, producer controls, and status.</p>
-    </section>
-  `,
+  imports: [TuiButton],
+  templateUrl: './dashboard.html',
+  styleUrl: './dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class Dashboard {}
+export class Dashboard {
+  readonly producer = inject(MarketProducerFacade);
+  readonly formatCurrencyCents = formatCurrencyCents;
+  readonly formatImbalance = formatImbalance;
+  readonly formatVolume = formatVolume;
+
+  toggleGeneration(): void {
+    if (this.producer.canPause()) {
+      this.producer.pause();
+    } else if (this.producer.canResume()) {
+      this.producer.resume();
+    }
+  }
+}

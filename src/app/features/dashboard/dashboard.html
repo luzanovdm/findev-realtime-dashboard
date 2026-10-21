@@ -1,0 +1,64 @@
+<div class="dashboard-heading">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="page-description">Live market metrics for the current run.</p>
+  </div>
+  <button
+    tuiButton
+    type="button"
+    [disabled]="!producer.canPause() && !producer.canResume()"
+    (click)="toggleGeneration()"
+  >
+    {{ producer.status() === 'paused' ? 'Resume' : 'Pause' }}
+  </button>
+</div>
+
+<p class="producer-status" role="status" aria-live="polite">
+  @switch (producer.status()) {
+    @case ('initializing') {
+      Initializing market data…
+    }
+    @case ('running') {
+      Live updates running.
+    }
+    @case ('paused') {
+      Updates paused. Current values and totals are preserved.
+    }
+    @case ('error') {
+      Market data unavailable.
+    }
+  }
+  @if (producer.stale()) {
+    Last confirmed values are outdated.
+  }
+</p>
+
+<div class="table-scroll" role="region" aria-label="Instrument metrics" tabindex="0">
+  <table>
+    <caption>
+      Current run instruments
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col">Instrument</th>
+        <th scope="col">Last price</th>
+        <th scope="col">Bid–ask spread</th>
+        <th scope="col">Trading volume</th>
+        <th scope="col">VWAP</th>
+        <th scope="col">Order-book imbalance</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (metric of producer.metrics(); track metric.instrument) {
+        <tr>
+          <th scope="row">{{ metric.instrument }}</th>
+          <td>{{ formatCurrencyCents(metric.lastPriceCents) }}</td>
+          <td>{{ formatCurrencyCents(metric.spreadCents) }}</td>
+          <td>{{ formatVolume(metric.volume) }}</td>
+          <td>{{ formatCurrencyCents(metric.vwapCents) }}</td>
+          <td>{{ formatImbalance(metric.imbalance) }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

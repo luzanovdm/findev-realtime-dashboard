@@ -88,7 +88,9 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
   icons, navigation buttons, and badges. The UI has no CDN dependencies.
 - Settings uses a validated Signal Forms draft. Edits stay local; Apply starts a new run and resets
   the form after worker acknowledgement.
-- The dashboard still needs its instrument table, metric formatting, and Pause/Resume control.
+- The dashboard renders five metrics per instrument with Decimal-only currency formatting, bigint
+  volume grouping, producer status, and Pause/Resume controls. The table scrolls within the page at
+  narrow widths.
 - Dashboard metrics, producer settings, and market updates are defined beside the feature that owns
   their behavior.
 - `MetricAccumulator` calculates exact Decimal prices and VWAP, bigint cumulative volume, spread,
@@ -124,8 +126,6 @@ the unit suite identify missing business-requirement coverage and do not count a
 
 ## Remaining implementation
 
-- Add the instrument table, currency and imbalance formatting, Pause/Resume controls, and responsive
-  behavior under higher update rates.
 - Complete browser acceptance, performance and failure-path checks, and automatic deployment.
 
 The AssemblyScript generator uses fixed memory and a non-collecting stub runtime; compiled-Wasm tests

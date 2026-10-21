@@ -42,6 +42,10 @@ browser. Repeating Apply in the same unsupported runtime is not offered as a use
 `Pause` and `Resume` are unavailable in any error state. A valid `Apply` or `Start new run` creates a
 higher `runId` and clears prior totals. It does not resume the failed run.
 
+The worker reports slow delivery only after five consecutive completed-batch intervals exceed twice
+the requested interval. Five consecutive timely intervals clear the warning. Pause and a new run
+also clear it. The warning does not change the producer status or discard any generated trade.
+
 ## 3. Failure catalogue
 
 The worker sends stable error codes, never raw exception text. The facade maps codes to fixed English
@@ -97,7 +101,7 @@ checks a supplied response content type before instantiation and treats HTML as 
 
 - Initialization and command acknowledgements have bounded deadlines. A timed-out worker is
   terminated, so a late response cannot revive the failed run.
-- A running worker sends progress with snapshots or a lightweight heartbeat. The facade detects a
+- A running worker sends progress with snapshots. The facade detects a
   lack of progress while the tab is visible, with a grace period when visibility returns. Hidden-tab
   timer throttling alone is not an error.
 - Pause unsubscribes from the next batch before acknowledgement. Resume starts after one full interval. A
@@ -107,7 +111,8 @@ checks a supplied response content type before instantiation and treats HTML as 
 
 Snapshots carry `runId`, a monotonic snapshot sequence, and a worker-generated timestamp. A snapshot
 is accepted only when its protocol and all rows validate. On acceptance the facade updates all rows
-atomically and records the timestamp. It rejects duplicates and out-of-order sequences. Snapshot
+atomically and records the timestamp. It rejects duplicates, out-of-order sequences, zero-volume
+rows with populated metrics, volume regressions, and a new sequence with no new trades. Snapshot
 coalescing may skip sequence numbers by design; a gap alone is not evidence of a lost trade.
 
 Before accumulation, each Wasm batch is validated in full. The accumulator is then updated
@@ -133,9 +138,10 @@ available. The messages are fixed English strings, for example:
 - `worker-unavailable`: “This browser cannot run the market producer.”
 
 The UI never displays a stack trace, local file path, asset URL, raw exception message, or internal
-numeric pointer. Development diagnostics record `code`, `runId`, lifecycle stage, batch/snapshot
-sequence, expected/observed facts, and the underlying cause once. Repeated timers or messages must
-not flood logs or banners.
+numeric pointer. Development diagnostics record `code`, `runId`, lifecycle stage, the last accepted
+snapshot sequence, and the underlying cause or expected/observed facts when available. Each failure
+boundary emits at most one diagnostic per failed run; repeated timers or messages must not flood logs
+or banners.
 
 ## 7. Required tests
 

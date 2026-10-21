@@ -14,6 +14,8 @@ The employer's original requirements are preserved in [TASK.md](TASK.md).
 - [Producer failure policy](docs/ERROR_HANDLING.md) defines severity, data trust, recovery, and
   user-visible errors.
 - [Local verification](docs/VERIFICATION.md) records the production-worker soak and browser checks.
+- [Code review](docs/CODE_REVIEW.md) records resolved architecture and code-quality findings and
+  remaining delivery limits.
 
 ## Environment and startup
 
@@ -96,7 +98,7 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
   narrow widths.
 - Dashboard metrics, producer settings, and market updates are defined beside the feature that owns
   their behavior.
-- `MetricAccumulator` calculates exact Decimal prices and VWAP, bigint cumulative volume, spread,
+- Pure metric accumulation calculates Decimal prices and VWAP, bigint cumulative volume, spread,
   and imbalance; it rejects a bad batch without changing the last confirmed totals.
 - `assembly/index.ts` contains the stateful market-update generator. Its randomness, price walk,
   instrument selection, trades, and order-book quantities run in Wasm; compiled-module tests cover
@@ -107,6 +109,8 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - The application-scoped producer facade owns the worker across route navigation. It reduces
   validated events to one state stream, exposes readonly signals, rejects stale runs, and presents
   safe errors and recovery actions.
+- Sustained slow batch delivery produces a nonblocking warning. Worker failures include structured
+  development diagnostics without exposing technical details in the interface.
 - Angular's global error handler exposes a fixed English recovery message for unexpected interface
   failures; the HTML shell has a fallback if application bootstrap fails before Angular renders.
 - EditorConfig, Prettier, and VS Code format-on-save settings with recommended extensions.
@@ -135,7 +139,7 @@ Automated end-to-end tests are not required by `TASK.md` and are not currently i
 ## Remaining implementation
 
 - Connect the private repository to Cloudflare Pages, verify the first deployment, and then make the
-  repository and demo accessible to interviewers. No deployment has been started yet.
+  repository and demo accessible to interviewers. No remote deployment has been verified yet.
 
 The AssemblyScript generator uses fixed memory and a non-collecting stub runtime; compiled-Wasm tests
 check that repeated maximum-size generation does not grow memory. Worker commands and events are
@@ -172,13 +176,11 @@ The lockfile pins exact package versions. Run `npm ls --depth=0` to inspect the 
 
 ## Publishing status
 
-The [GitHub repository](https://github.com/luzanovdm/findev-realtime-dashboard) is private and
-has not been updated with the local implementation commits. Cloudflare Pages is the selected host;
-the remote project and live demo do not exist yet. The local build includes `public/_headers` so the
-Wasm asset is served as `application/wasm` on Pages.
+The [GitHub repository](https://github.com/luzanovdm/findev-realtime-dashboard) is private.
+Cloudflare Pages is the selected host; the remote project and live demo have not been verified.
+The local build includes `public/_headers` so the Wasm asset is served as `application/wasm` on Pages.
 
-When remote publication is authorized, connect the GitHub repository using Cloudflare Pages Git
-integration with these settings:
+Connect the GitHub repository using Cloudflare Pages Git integration with these settings:
 
 | Setting             | Value                                    |
 | ------------------- | ---------------------------------------- |
@@ -189,11 +191,14 @@ integration with these settings:
 | Build environment   | `SKIP_DEPENDENCY_INSTALL=1`              |
 | Node version        | `.nvmrc` (`24.21.0`)                     |
 | Build watch include | `*`                                      |
-| Build watch exclude | `docs/*`, `*.md`                         |
+| Build watch exclude | None                                     |
 
 `npm run check` creates the production build while running the worker/Wasm integration checks;
-Pages publishes that same build directory. Its default SPA routing serves `index.html` for direct
-`/dashboard` and `/settings` requests when there is no top-level `404.html`. The Pages project must
+Pages publishes that same build directory. Pages builds on every push to `main`, as required by
+`TASK.md`; the separate GitHub Actions quality workflow stays manual during implementation and must
+exclude documentation-only changes if automatic checks are restored. Cloudflare Pages' default SPA
+routing serves `index.html` for direct `/dashboard` and `/settings` requests when there is no
+top-level `404.html`. The Pages project must
 be checked over HTTP for both routes and the Wasm response, then a later code push must be observed
 deploying automatically before the assignment is submitted. GitHub Actions remains manually
 dispatched during implementation and is not a substitute for a verified deployment.

@@ -15,6 +15,14 @@ This plan implements the assignment in reviewable vertical increments. Each phas
 evidence and leaves the application in a coherent state. A phase is complete only when its listed
 acceptance gate passes; creating the files alone is not completion.
 
+| Phase                              | Current status   | Evidence                                                                            |
+| ---------------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
+| 0–2: architecture, contracts, Wasm | Complete locally | ADR, compiled ABI and generator tests                                               |
+| 3–5: worker, metrics, facade       | Complete locally | Virtual-scheduler, pure-metric, facade, and built-worker tests                      |
+| 6–7: settings and dashboard        | Complete locally | Component tests and browser acceptance, including native 200% zoom                  |
+| 8: integration and performance     | Complete locally | [Verification record](VERIFICATION.md), including the five-minute maximum-rate soak |
+| 9: automatic deployment            | Open             | Cloudflare Git connection, live demo, and push-to-live proof are pending            |
+
 The pure accumulator from Phase 4 is implemented before the Phase 3 worker controller because the
 controller needs an atomic batch consumer. Phase 4's worker integration and snapshot-rate gate remain
 open until that controller exists. This ordering does not change either phase's acceptance gate.
@@ -153,7 +161,7 @@ asynchronous behavior.
 
 1. Replace the scaffold loader with a Wasm adapter that:
    - fetches the asset;
-   - instantiates it once per worker;
+   - instantiates it once per run, replacing the prior instance on Apply;
    - validates exports and ABI version;
    - validates returned pointer ranges;
    - decodes packed records;
@@ -285,8 +293,8 @@ asynchronous behavior.
 6. Disable or block Apply while invalid or while the new run is initializing.
 7. Submit a copied settings value to the facade.
 8. After acknowledgement, reset draft, dirty, and submitted state to the accepted settings.
-9. If active settings change while the form is pristine, refresh the draft. If the form is dirty,
-   preserve the user's draft until Apply or route exit.
+9. If active settings change while the draft still equals the previously accepted values, refresh it.
+   If the draft differs, preserve the user's edits until Apply or route exit.
 
 ### Tests
 
@@ -294,7 +302,8 @@ asynchronous behavior.
 - Fractions, empty values, values outside ranges, `NaN`, and infinities are rejected.
 - Editing does not send producer commands.
 - Valid Apply sends one immutable settings snapshot.
-- Apply resets prior metric state through the facade and starts a paused producer.
+- Apply resets prior metric state through the facade and starts a running producer, including when
+  the previous run was paused.
 - Invalid submit sends nothing and exposes associated errors.
 - Tests act, await `fixture.whenStable()`, and assert without manual change-detection workarounds.
 
@@ -319,7 +328,8 @@ asynchronous behavior.
 4. Display zero volume and unavailable values before the first update.
 5. Add a single Pause/Resume control whose label and enabled state derive from producer status.
 6. Display initialization, running, paused, and error states and announce changes with `aria-live`.
-7. Keep the final rows visible while paused or errored.
+7. Keep the final rows visible while paused or after a recoverable run error; hide metrics after an
+   integrity-critical failure.
 8. Use `OnPush`, stable row tracking, and no per-update main-thread subscriptions.
 9. Add responsive table containment, visible focus, keyboard operation, and 200% zoom checks.
 
@@ -352,7 +362,8 @@ asynchronous behavior.
 4. Run the maximum configuration and capture:
    - worker update accounting;
    - UI snapshot rate;
-   - main-thread render duration;
+   - main-thread long tasks and animation-frame spacing, matching the measured responsiveness budget
+     in `ARCHITECTURE.md`;
    - memory trend for five minutes;
    - responsiveness of navigation and Pause.
 5. Tune snapshot coalescing or row projection only if a documented budget fails.
@@ -376,13 +387,15 @@ asynchronous behavior.
 
 ### Work
 
-1. Choose Cloudflare Pages, GitHub Pages, or Vercel after a small deployment check confirms:
+1. Validate the selected Cloudflare Pages host with a small remote deployment check confirming:
    - private-repository connection during development;
    - automatic deployment from pushes;
    - SPA route fallback;
    - correct `.wasm` MIME type;
    - stable public access for interviewers.
-2. Configure CI to block deployment when the complete quality command fails.
+2. Configure the hosting build to block publication when the complete quality command fails. Keep
+   GitHub Actions manual-only during implementation; documentation-only changes must not trigger it
+   when automatic checks are later restored.
 3. Build once and publish the tested artifact rather than rebuilding with different inputs in an
    opaque deployment step where the provider permits it.
 4. Check the live commit after overlapping or consecutive pushes; confirm the provider does not

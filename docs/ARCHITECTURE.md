@@ -73,7 +73,7 @@ src/app/
   features/
     market-producer/           live-market production capability
       market-producer.facade.ts public Angular facade; the feature's public entry point
-      market-producer.types.ts active settings, status, snapshots, commands
+      market-producer.types.ts status and metric snapshots
       producer-settings.ts     defaults, limits, and validation rules
       producer.worker.ts
       producer-controller.ts
@@ -111,7 +111,7 @@ describe that policy rather than its technical type.
 
 | Owner                   | State and responsibility                                      | Lifetime                             |
 | ----------------------- | ------------------------------------------------------------- | ------------------------------------ |
-| Wasm generator          | PRNG state, current price per instrument, fixed output buffer | One Wasm instance inside the worker  |
+| Wasm generator          | PRNG state, current price per instrument, fixed output buffer | One active instance per run          |
 | Worker controller       | RxJS run and control streams, Wasm calls, metric fold         | One dedicated worker per application |
 | Metric accumulator      | Decimal quote/trade values, cumulative volume and notional    | Current run only                     |
 | Angular producer facade | Worker ownership, validated event intake, readonly UI signals | Application lifetime                 |
@@ -272,7 +272,7 @@ The worker is both an anti-corruption boundary and the data plane. It owns:
 - typed error conversion.
 
 The worker decodes commands into a stream. `switchMap` replaces the prior run and aborts its pending
-Wasm load. Valid Pause/Resume commands fold into a mode stream with `scan`; switching to paused
+Wasm load. Valid Pause/Resume commands map to a distinct mode stream; switching to paused
 unsubscribes from generation. A batch observable repeats only after the preceding batch and metric
 fold complete, with one configured interval between them. Resume waits a full interval. No stream
 replays missed time or starts overlapping batches. A second `scan` accumulates every update and
@@ -295,11 +295,13 @@ The event protocol is a closed union:
 - `run-started`: `runId`, active settings;
 - `snapshot`: `runId`, metric rows;
 - `status-changed`: `runId`, status;
+- `pace-changed`: `runId`, sustained slow-delivery flag;
 - `run-error`: `runId` and a stable error code. The main thread supplies the fixed safe message.
 
 TypeScript interfaces document this protocol; explicit type guards validate it at both message
 boundaries. Unknown message types, invalid settings, and impossible state transitions become protocol
-errors.
+errors. The facade also rejects snapshot volume regressions and higher sequences with no new trade
+volume, protecting cumulative totals from inconsistent worker messages.
 
 ## 8. Metric model
 
@@ -335,8 +337,9 @@ values are:
 The dashboard rounds only while formatting. It displays unavailable values as an em dash, price
 values as currency with two decimal places, volume as grouped units, and imbalance within `[-1, 1]`.
 
-The accumulator API accepts one decoded update at a time. The worked example, zero denominators, and
-instrument isolation are pure deterministic tests.
+The accumulator folds one fully validated batch into a new immutable state value. A rejected batch
+leaves the prior state untouched. The worked example, zero denominators, and instrument isolation
+are pure deterministic tests.
 
 ## 9. Angular state and UI design
 
@@ -396,9 +399,13 @@ The initial 16 ms p95 render-duration target was replaced with observable browse
 application-specific render instrumentation, frame spacing does not measure render work. In local
 Headless Chrome 155 at 50 instruments, 1,000 updates per batch, and 50 ms intervals, a 10-second
 sample had no tasks over 50 ms and a 16.7 ms p95 frame interval. Pause feedback was observed at
-1.3 ms. A five-minute production-worker soak accounted for 5,473,000 updates, emitted 9.13 running
-snapshots per second, and ended at 26.4 MB used heap after a transient 65.9 MB peak. These are local
+1.3 ms. A five-minute production-worker soak on commit `fe1f737` accounted for 5,440,000 updates,
+emitted 9.07 running snapshots per second, and ended at 18.7 MB used heap after a transient sampled
+64.5 MB peak. These are local
 observations, not a claim about every device or deployed host.
+
+Five consecutive batch intervals slower than twice the configured delay produce a nonblocking pace
+warning. Five timely intervals clear it. This warning never changes the run state or discards updates.
 
 ## 11. Errors, cleanup, and recovery
 
@@ -433,7 +440,7 @@ and `_headers` rules; the build includes an explicit `application/wasm` rule. Th
 will run `npm ci && npm run check` with automatic dependency installation disabled, then publish
 `dist/findev-realtime-dashboard/browser/`. Wrangler's local Pages emulator served both direct routes
 and the Wasm asset correctly; the eventual remote project must be checked independently. Remote
-connection and push-to-live verification remain pending while pushes are withheld.
+connection and push-to-live verification remain pending.
 
 ## 13. Verification strategy
 

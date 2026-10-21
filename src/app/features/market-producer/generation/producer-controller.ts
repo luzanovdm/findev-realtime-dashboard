@@ -57,16 +57,16 @@ type CommandInput =
   | { readonly kind: 'valid'; readonly command: ProducerWorkerCommand }
   | { readonly kind: 'malformed'; readonly runId: number | null };
 
-type RunTransition =
-  | { readonly kind: 'start'; readonly command: StartRunCommand }
-  | { readonly kind: 'protocol-error'; readonly runId: number }
-  | { readonly kind: 'dispose' };
+interface TransitionStreams {
+  start(command: StartRunCommand): Observable<ProducerWorkerEvent>;
+  protocolError(runId: number): Observable<ProducerWorkerEvent>;
+}
 
 interface RouteState {
   readonly currentRunId: number;
   readonly protocolFailedRunId: number | null;
   readonly disposed: boolean;
-  readonly transition: RunTransition | null;
+  readonly transition: Observable<ProducerWorkerEvent> | null;
 }
 
 type RunMode = 'running' | 'paused';
@@ -75,11 +75,13 @@ type ControlCommand = Extract<ProducerWorkerCommand, { type: 'pause' | 'resume' 
 const MODE_FOR_CONTROL = { pause: 'paused', resume: 'running' } as const satisfies Readonly<
   Record<ControlCommand['type'], RunMode>
 >;
+const MODE_BY_CONTROL: ReadonlyMap<string, RunMode> = new Map(Object.entries(MODE_FOR_CONTROL));
 
-type ActiveInput =
-  | { readonly kind: 'mode'; readonly mode: RunMode; readonly initial: boolean }
-  | { readonly kind: 'batch'; readonly updates: ReturnType<GeneratorPort['generateBatch']> };
-type ModeInput = Extract<ActiveInput, { kind: 'mode' }>;
+interface ModeInput {
+  readonly mode: RunMode;
+  readonly initial: boolean;
+}
+type ActiveChange = (state: ActiveState) => ActiveState;
 
 interface ActiveState {
   readonly metrics: MetricState;
@@ -123,39 +125,25 @@ export class ProducerController {
 
   constructor(private readonly dependencies: ControllerDependencies) {
     const commands = this.input.pipe(map(decodeCommand), share());
+    const transitions = {
+      start: (command: StartRunCommand) => this.run(command, commands),
+      protocolError: (runId: number) =>
+        defer(() => {
+          this.reportFailure({ code: 'protocol', runId, stage: 'command' });
+          return of({ type: 'run-error', runId, code: 'protocol' } as const);
+        }),
+    } satisfies TransitionStreams;
     commands
       .pipe(
-        scan(routeCommand, INITIAL_ROUTE_STATE),
+        scan((state, input) => routeCommand(state, input, transitions), INITIAL_ROUTE_STATE),
         takeWhile((state) => !state.disposed, true),
         filter(
-          (state): state is RouteState & { transition: RunTransition } => state.transition !== null,
+          (state): state is RouteState & { transition: Observable<ProducerWorkerEvent> } =>
+            state.transition !== null,
         ),
         map((state) => state.transition),
-        switchMap((transition): Observable<ProducerWorkerEvent> => {
-          switch (transition.kind) {
-            case 'start':
-              return this.run(transition.command, commands);
-            case 'protocol-error':
-              this.reportFailure({
-                code: 'protocol',
-                runId: transition.runId,
-                stage: 'command',
-              });
-              return of({ type: 'run-error', runId: transition.runId, code: 'protocol' });
-            case 'dispose':
-              return EMPTY;
-          }
-        }),
-        scan(
-          (state, event): EmissionState =>
-            event.type === 'run-error' && state.failedRunId === event.runId
-              ? { ...state, event: null }
-              : {
-                  failedRunId: event.type === 'run-error' ? event.runId : state.failedRunId,
-                  event,
-                },
-          INITIAL_EMISSION_STATE,
-        ),
+        switchMap((transition) => transition),
+        scan(deduplicateRunError, INITIAL_EMISSION_STATE),
         filter(
           (state): state is EmissionState & { event: ProducerWorkerEvent } => state.event !== null,
         ),
@@ -173,13 +161,7 @@ export class ProducerController {
     commands: Observable<CommandInput>,
   ): Observable<ProducerWorkerEvent> {
     const abortController = new AbortController();
-    const invalidControl = commands.pipe(
-      filter(
-        (input) =>
-          input.kind === 'valid' &&
-          input.command.runId === command.runId &&
-          (input.command.type === 'pause' || input.command.type === 'resume'),
-      ),
+    const invalidControl = controlModesForRun(commands, command.runId).pipe(
       map((): GeneratorPort => {
         throw new ProducerFault('protocol');
       }),
@@ -216,18 +198,38 @@ export class ProducerController {
   ): Observable<ProducerWorkerEvent> {
     const intervalMs = command.settings.batchIntervalMs;
     const scheduler = this.dependencies.scheduler ?? asyncScheduler;
-    const modes = commands.pipe(
-      filter(
-        (input): input is { kind: 'valid'; command: ControlCommand } =>
-          input.kind === 'valid' &&
-          input.command.runId === command.runId &&
-          (input.command.type === 'pause' || input.command.type === 'resume'),
-      ),
-      map((input) => MODE_FOR_CONTROL[input.command.type]),
+    const modes = controlModesForRun(commands, command.runId).pipe(
       startWith('running' as const),
       distinctUntilChanged(),
-      map((mode, index): ModeInput => ({ kind: 'mode', mode, initial: index === 0 })),
+      map((mode, index): ModeInput => ({ mode, initial: index === 0 })),
     );
+    const batches = defer(() => of(generator.generateBatch(command.settings.updatesPerBatch))).pipe(
+      repeat({ delay: () => timer(intervalMs, scheduler) }),
+      map(
+        (updates): ActiveChange =>
+          (state) =>
+            reduceBatch(
+              state,
+              updates,
+              command.runId,
+              command.settings.updatesPerBatch,
+              intervalMs,
+              this.dependencies,
+            ),
+      ),
+    );
+    const modeStreams = {
+      running: ({ initial }: ModeInput) => {
+        const scheduled = initial
+          ? batches
+          : timer(intervalMs, scheduler).pipe(switchMap(() => batches));
+        return concat(
+          of((state: ActiveState) => resumeState(state, command.runId)),
+          scheduled,
+        );
+      },
+      paused: () => of((state: ActiveState) => pauseState(state, command.runId, this.dependencies)),
+    } satisfies Readonly<Record<RunMode, (input: ModeInput) => Observable<ActiveChange>>>;
 
     const initial: ActiveState = {
       metrics: createMetricState(command.settings.instrumentCount),
@@ -238,31 +240,8 @@ export class ProducerController {
       events: [],
     };
     return modes.pipe(
-      switchMap((input) => {
-        if (input.mode === 'paused') return of(input);
-        const batch = defer(() =>
-          of(generator.generateBatch(command.settings.updatesPerBatch)),
-        ).pipe(
-          repeat({ delay: () => timer(intervalMs, scheduler) }),
-          map((updates): ActiveInput => ({ kind: 'batch', updates })),
-        );
-        const scheduled = input.initial
-          ? batch
-          : timer(intervalMs, scheduler).pipe(switchMap(() => batch));
-        return concat(of(input), scheduled);
-      }),
-      scan(
-        (state, input) =>
-          reduceActive(
-            state,
-            input,
-            command.runId,
-            command.settings.updatesPerBatch,
-            command.settings.batchIntervalMs,
-            this.dependencies,
-          ),
-        initial,
-      ),
+      switchMap((input) => modeStreams[input.mode](input)),
+      scan((state, change) => change(state), initial),
       mergeMap((state) => from(state.events)),
       catchError((error: unknown) => of(this.failureEvent(command.runId, 'generation', error))),
     );
@@ -299,7 +278,24 @@ function decodeCommand(value: unknown): CommandInput {
   };
 }
 
-function routeCommand(state: RouteState, input: CommandInput): RouteState {
+function controlModesForRun(
+  commands: Observable<CommandInput>,
+  runId: number,
+): Observable<RunMode> {
+  return commands.pipe(
+    filter((input): input is Extract<CommandInput, { kind: 'valid' }> => input.kind === 'valid'),
+    map((input) => input.command),
+    filter((command) => command.runId === runId),
+    map((command) => MODE_BY_CONTROL.get(command.type)),
+    filter((mode): mode is RunMode => mode !== undefined),
+  );
+}
+
+function routeCommand(
+  state: RouteState,
+  input: CommandInput,
+  transitions: TransitionStreams,
+): RouteState {
   if (state.disposed) return { ...state, transition: null };
   if (input.kind === 'malformed') {
     if (
@@ -313,7 +309,7 @@ function routeCommand(state: RouteState, input: CommandInput): RouteState {
       currentRunId: input.runId,
       protocolFailedRunId: input.runId,
       disposed: false,
-      transition: { kind: 'protocol-error', runId: input.runId },
+      transition: transitions.protocolError(input.runId),
     };
   }
 
@@ -323,59 +319,86 @@ function routeCommand(state: RouteState, input: CommandInput): RouteState {
       currentRunId: command.runId,
       protocolFailedRunId: null,
       disposed: false,
-      transition: { kind: 'start', command },
+      transition: transitions.start(command),
     };
   }
   if (command.type === 'dispose' && command.runId === state.currentRunId) {
-    return { ...state, disposed: true, transition: { kind: 'dispose' } };
+    return { ...state, disposed: true, transition: EMPTY };
   }
   return { ...state, transition: null };
 }
 
-function reduceActive(
+function deduplicateRunError(state: EmissionState, event: ProducerWorkerEvent): EmissionState {
+  if (event.type !== 'run-error') return { ...state, event };
+  if (state.failedRunId === event.runId) return { ...state, event: null };
+  return { failedRunId: event.runId, event };
+}
+
+function resumeState(state: ActiveState, runId: number): ActiveState {
+  return {
+    ...state,
+    pace: INITIAL_PACE,
+    events: [{ type: 'status-changed', runId, status: 'running' }],
+  };
+}
+
+function pauseState(
   state: ActiveState,
-  input: ActiveInput,
+  runId: number,
+  dependencies: ControllerDependencies,
+): ActiveState {
+  const publishPending = state.sequence > state.publishedSequence;
+  const events = [
+    { include: publishPending, create: () => makeSnapshot(state, runId, dependencies) },
+    {
+      include: state.pace.slow,
+      create: (): ProducerWorkerEvent => ({ type: 'pace-changed', runId, slow: false }),
+    },
+    {
+      include: true,
+      create: (): ProducerWorkerEvent => ({ type: 'status-changed', runId, status: 'paused' }),
+    },
+  ]
+    .filter(({ include }) => include)
+    .map(({ create }) => create());
+  return {
+    ...state,
+    publishedSequence: state.sequence,
+    lastPublishedAt: publishPending ? dependencies.now() : state.lastPublishedAt,
+    pace: INITIAL_PACE,
+    events,
+  };
+}
+
+function reduceBatch(
+  state: ActiveState,
+  updates: ReturnType<GeneratorPort['generateBatch']>,
   runId: number,
   batchSize: number,
   intervalMs: number,
   dependencies: ControllerDependencies,
 ): ActiveState {
-  if (input.kind === 'mode') {
-    if (input.mode === 'running') {
-      return {
-        ...state,
-        pace: INITIAL_PACE,
-        events: [{ type: 'status-changed', runId, status: 'running' }],
-      };
-    }
-    const snapshot =
-      state.sequence > state.publishedSequence ? [makeSnapshot(state, runId, dependencies)] : [];
-    const paceClear: ProducerWorkerEvent[] = state.pace.slow
-      ? [{ type: 'pace-changed', runId, slow: false }]
-      : [];
-    return {
-      ...state,
-      publishedSequence: state.sequence,
-      lastPublishedAt: snapshot.length > 0 ? dependencies.now() : state.lastPublishedAt,
-      pace: INITIAL_PACE,
-      events: [...snapshot, ...paceClear, { type: 'status-changed', runId, status: 'paused' }],
-    };
-  }
-
-  if (input.updates.length !== batchSize) throw new ProducerFault('protocol');
-  const metrics = accumulateMetricBatch(state.metrics, input.updates);
+  if (updates.length !== batchSize) throw new ProducerFault('protocol');
+  const metrics = accumulateMetricBatch(state.metrics, updates);
   const sequence = state.sequence + 1;
   const now = dependencies.now();
   const pace = measurePace(state.pace, now, intervalMs);
   const publish = state.lastPublishedAt === null || now - state.lastPublishedAt >= 100;
   const next = { ...state, metrics, pace, sequence };
-  const paceChanged: ProducerWorkerEvent[] =
-    pace.slow === state.pace.slow ? [] : [{ type: 'pace-changed', runId, slow: pace.slow }];
+  const events = [
+    { include: publish, create: () => makeSnapshot(next, runId, dependencies) },
+    {
+      include: pace.slow !== state.pace.slow,
+      create: (): ProducerWorkerEvent => ({ type: 'pace-changed', runId, slow: pace.slow }),
+    },
+  ]
+    .filter(({ include }) => include)
+    .map(({ create }) => create());
   return {
     ...next,
     publishedSequence: publish ? sequence : state.publishedSequence,
     lastPublishedAt: publish ? now : state.lastPublishedAt,
-    events: [...(publish ? [makeSnapshot(next, runId, dependencies)] : []), ...paceChanged],
+    events,
   };
 }
 

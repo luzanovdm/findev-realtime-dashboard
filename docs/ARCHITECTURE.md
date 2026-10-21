@@ -75,6 +75,7 @@ src/app/
   features/
     market-producer/           live-market production capability
       market-producer.facade.ts public Angular facade; the feature's public entry point
+      producer-state.ts         pure producer transitions and snapshot acceptance rules
       market-producer.types.ts status and metric snapshots
       producer-settings.ts     defaults, limits, and validation rules
       producer-settings-storage.ts browser-scoped accepted settings
@@ -130,9 +131,12 @@ describe that policy rather than its technical type.
 | Settings route          | Editable draft and validation state                           | Route component lifetime             |
 | Dashboard route         | Table and control presentation                                | Route component lifetime             |
 
-The app shell eagerly creates the root-provided producer facade. Route components never construct a
-worker. Destroying and recreating either route therefore preserves the active run and cannot multiply
-producers. Application teardown terminates the worker and removes listeners.
+The app shell eagerly creates the root-provided producer facade. The facade owns browser effects and
+feeds validated events into a pure feature-owned state reducer. The reducer uses exhaustive action
+and event matching, a typed status-transition table, and explicit snapshot acceptance rules. Route
+components never construct a worker. Destroying and recreating either route therefore preserves the
+active run and cannot multiply producers. Application teardown terminates the worker and removes
+listeners.
 
 ## 5. Run and producer state model
 

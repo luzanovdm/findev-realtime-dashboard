@@ -25,7 +25,7 @@ five-minute soak and native-zoom observations are not attributed to that revisio
 | Unexpected interface error | Browser `ErrorEvent` injection and component test                                           | Fixed English recovery banner appeared without raw exception text; Reload cleared the error and restarted the dashboard.                                                                                                                                                        |
 | Local Pages emulation      | Wrangler 4.151.3 serving the production output                                              | Direct GETs to `/dashboard` and `/settings` returned `200 text/html`; the Wasm asset returned `200 application/wasm`. Both routes rendered live values in Headless Chrome. A missing Wasm path returned `200 text/html` via SPA fallback and was classified as a fetch failure. |
 
-The current local revision passed `npm run check`: formatting; strict TypeScript checks for the app,
+The earlier settings and pipes revision passed `npm run check`: formatting; strict TypeScript checks for the app,
 worker, and tests; 152 Angular/Vitest tests; eight compiled-Wasm and production-worker tests; and a
 production build. `npm run audit` reported zero vulnerabilities. In Headless Chrome, Apply showed a
 visible saved/live status, and a reload restored the values 50 / 1,000 / 50 and started a new running
@@ -33,6 +33,22 @@ run. The maximum-rate dashboard displayed 50 semantic rows without horizontal pa
 10-second foreground sample recorded zero `longtask` entries and 16.8 ms p95 animation-frame spacing
 over 601 frames. This sample does not replace the older five-minute accounting soak or native 200%
 zoom check.
+
+The current protocol, state-transition, and form refactor passed `npm run check`: formatting, strict
+application/worker/spec TypeScript checks, 156 Angular/Vitest tests, eight compiled-Wasm and
+production-worker tests, and a production build. `npm run audit` reported zero vulnerabilities. The
+initial bundle is 501.98 kB raw (117.36 kB estimated transfer), within the reviewed 510 kB warning
+budget; the 1 MB error budget is unchanged. A new five-minute
+built-worker soak with 50 instruments, 1,000 updates per batch, and a requested 50 ms interval
+processed 5,370 batches and accounted for all 5,370,000 updates against deterministic compiled-Wasm
+replay. It emitted 2,685 running snapshots (8.95 Hz), with a shortest worker timestamp interval of
+103 ms and a 7 ms Pause acknowledgement. Worker heap samples were 12.4 MB at the start, peaked at
+44.3 MB, and were 25.2 MB at five minutes; they did not rise monotonically. This observation does not
+prove the absence of all leaks. In a local browser, Apply showed saved/live feedback, the 50-row
+dashboard displayed formatted currency, volume, and imbalance values, and a reload restored the
+accepted 50 / 1,000 / 50 settings; no browser-console errors were observed. The later form teardown
+and feedback-lifetime edits were covered by unit tests and the final locked quality command; the
+browser observation precedes only those form edits.
 
 The soak validates accounting for the number of batches actually generated. The requested 50 ms
 interval is pacing between completed batches, so throughput may be below the nominal 20,000 updates

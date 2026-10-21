@@ -124,35 +124,44 @@ export function serializedMetricSnapshot(
 }
 
 function assertValidUpdate(value: unknown, instrumentCount: number): asserts value is MarketUpdate {
-  if (!isRecord(value)) {
-    throw new ProducerFault('invalid-update');
-  }
-  const update = value;
-  if (
-    typeof update['instrumentIndex'] !== 'number' ||
-    !Number.isInteger(update['instrumentIndex']) ||
-    update['instrumentIndex'] < 0 ||
-    update['instrumentIndex'] >= instrumentCount ||
-    !(update['priceCents'] instanceof FinancialDecimal) ||
-    !(update['bidCents'] instanceof FinancialDecimal) ||
-    !(update['askCents'] instanceof FinancialDecimal) ||
-    !update['priceCents'].isInteger() ||
-    !update['bidCents'].isInteger() ||
-    !update['askCents'].isInteger() ||
-    !update['bidCents'].greaterThan(0) ||
-    !update['askCents'].greaterThan(update['bidCents']) ||
-    (!update['priceCents'].equals(update['bidCents']) &&
-      !update['priceCents'].equals(update['askCents'])) ||
-    typeof update['tradeQuantity'] !== 'bigint' ||
-    update['tradeQuantity'] <= 0n ||
-    typeof update['bidQuantity'] !== 'bigint' ||
-    update['bidQuantity'] < 0n ||
-    typeof update['askQuantity'] !== 'bigint' ||
-    update['askQuantity'] < 0n
-  ) {
+  if (!isRecord(value) || !hasValidFields(value) || !hasValidRelations(value, instrumentCount)) {
     throw new ProducerFault('invalid-update', {
       expected: `a valid update for one of ${instrumentCount} instruments`,
       observed: value,
     });
   }
+}
+
+type ValueGuard = (value: unknown) => boolean;
+
+const UPDATE_FIELDS: readonly (readonly [string, ValueGuard])[] = Object.entries({
+  instrumentIndex: (value: unknown) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 0,
+  priceCents: isPositiveWholeDecimal,
+  tradeQuantity: (value: unknown) => typeof value === 'bigint' && value > 0n,
+  bidCents: isPositiveWholeDecimal,
+  askCents: isPositiveWholeDecimal,
+  bidQuantity: (value: unknown) => typeof value === 'bigint' && value >= 0n,
+  askQuantity: (value: unknown) => typeof value === 'bigint' && value >= 0n,
+} satisfies Readonly<Record<keyof MarketUpdate, ValueGuard>>);
+
+function isPositiveWholeDecimal(value: unknown): value is Decimal {
+  return value instanceof FinancialDecimal && value.isInteger() && value.greaterThan(0);
+}
+
+function hasValidFields(
+  value: Readonly<Record<string, unknown>>,
+): value is Readonly<Record<string, unknown>> & MarketUpdate {
+  for (const [field, guard] of UPDATE_FIELDS) {
+    if (!guard(value[field])) return false;
+  }
+  return true;
+}
+
+function hasValidRelations(update: MarketUpdate, instrumentCount: number): boolean {
+  return (
+    update.instrumentIndex < instrumentCount &&
+    update.askCents.greaterThan(update.bidCents) &&
+    (update.priceCents.equals(update.bidCents) || update.priceCents.equals(update.askCents))
+  );
 }

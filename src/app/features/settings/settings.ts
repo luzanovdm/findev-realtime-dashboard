@@ -7,6 +7,7 @@ import {
   linkedSignal,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormField, FormRoot, form, validate } from '@angular/forms/signals';
 import { TuiButton } from '@taiga-ui/core';
 import { firstValueFrom } from 'rxjs';
@@ -72,13 +73,19 @@ export class Settings {
         .find((error) => error.kind === 'apply-error')?.message,
   );
   readonly feedback = signal<{
+    readonly runId: number;
     readonly draft: SettingsDraft;
     readonly kind: 'saved' | 'unavailable';
     readonly message: string;
   } | null>(null);
   readonly visibleFeedback = computed(() => {
     const feedback = this.feedback();
-    return feedback !== null && sameSettingsDraft(feedback.draft, this.draft()) ? feedback : null;
+    return feedback !== null &&
+      feedback.runId === this.producer.runId() &&
+      this.producer.status() !== 'error' &&
+      sameSettingsDraft(feedback.draft, this.draft())
+      ? feedback
+      : null;
   });
   readonly applyUnavailable = computed(
     () =>
@@ -102,7 +109,10 @@ export class Settings {
     }
 
     try {
-      const outcome = await firstValueFrom(this.producer.outcomeOf(this.producer.runId()));
+      const runId = this.producer.runId();
+      const outcome = await firstValueFrom(
+        this.producer.outcomeOf(runId).pipe(takeUntilDestroyed(this.destroyRef)),
+      );
       if (this.destroyRef.destroyed) return;
       const saveStatus = this.producer.settingsSaveStatus() ?? 'unavailable';
       const copy = SAVE_FEEDBACK[saveStatus];
@@ -114,6 +124,7 @@ export class Settings {
       }
 
       this.feedback.set({
+        runId,
         draft: submittedDraft,
         kind: saveStatus,
         message: copy.success,

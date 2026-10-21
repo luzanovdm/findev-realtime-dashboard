@@ -4,7 +4,7 @@
 | --------------- | -------------------------------------------------------------------------------------------------- |
 | Scope           | Implementation against [TASK.md](../TASK.md) and the [implementation plan](IMPLEMENTATION_PLAN.md) |
 | Reviewed        | 2026-10-21                                                                                         |
-| Source baseline | Current local review, including the settings and feature-structure revision                        |
+| Source baseline | Current local review, including form, protocol, reducer, and feature-boundary revisions            |
 | Verification    | [Local verification](VERIFICATION.md)                                                              |
 
 ## Requirement and boundary review
@@ -47,29 +47,34 @@
 
 ## Pattern and smell assessment
 
-The remaining `switch` statements are on closed protocol/event unions: worker command decoding and
-the facade's pure state reducer. They make legal transitions and exhaustive cases visible. Replacing
-them with dynamic dispatch tables would spread validation and weaken type narrowing. Remaining
-conditional expressions select nullable metric values, scheduling policy, or immutable projections;
-they do not own hidden process state. Production scheduling and watchdogs use RxJS `timer`, `repeat`,
-and `switchMap`; timer-based waits outside RxJS appear only in test and soak tooling.
+Worker protocol guards are keyed by the closed command and event discriminants; each message field is
+checked by a typed rule registry. The controller routes command transitions to RxJS streams and
+reduces active-mode changes through pure state transformations. The facade now delegates to a pure
+`producer-state` reducer. Exhaustive `ts-pattern` matching narrows actions and worker events without
+casts, while a status-transition table records the legal lifecycle edges. Snapshot acceptance rules
+name each invariant instead of embedding them in one compound conditional. The remaining conditionals
+select nullable values or guard effect boundaries; they do not form a second state machine.
+Production scheduling and watchdogs use RxJS `timer`, `repeat`, and `switchMap`; timer-based waits
+outside RxJS appear only in test and soak tooling.
 
 The facade has imperative methods for browser-owned resources (`Worker`, `postMessage`, termination)
 and user commands. Those are effect boundaries around the observable state reducer, not a second
 state store. Worker transport validates values at runtime because TypeScript types disappear across
 `postMessage` and the Wasm ABI. The accumulator and reducer are pure, while the Wasm instance alone
-owns mutable generator state.
+owns mutable generator state. The accumulator evaluates declarative field rules with a short-circuit
+loop because it validates every generated trade at up to 20,000 updates per second.
 
 ## Follow-up review: settings, strictness, and feature cohesion
 
 | Finding                                            | Change and verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Apply gave no completion feedback                  | The form now shows a pending label and disables repeated submission. Once the worker acknowledges a running run, a nearby `role="status"` message confirms both the live run and whether browser storage succeeded. A failed run keeps its draft and shows an actionable `role="alert"`. Both messages disappear when the draft changes. Component tests and a real-browser Apply confirm the states.                                                                                                                                                                                      |
+| Apply gave no completion feedback                  | The form now shows a pending label and disables repeated submission. Once the worker acknowledges a running run, a nearby `role="status"` message confirms both the live run and whether browser storage succeeded. A failed run keeps its draft and shows an actionable `role="alert"`. Success feedback is tied to its run and disappears if that run later fails or the draft changes. Component tests and a real-browser Apply confirm the states.                                                                                                                                     |
 | Reload discarded accepted settings                 | The producer now reads and validates a versioned `localStorage` value before initial startup and saves accepted values on Apply. Missing, malformed, or inaccessible storage falls back to defaults without crashing. Reload starts a fresh run with saved settings; volume, snapshot, and Pause state are not persisted. Storage, facade, and browser-reload checks cover this.                                                                                                                                                                                                           |
 | Repeated field checks and hand-written comparisons | One constraints object defines the setting names, limits, and defaults. The draft form registers validators from those names, and draft/worker setting comparisons iterate the same keys. Typed construction of defaults and drafts still lists the three fields so adding a field produces a compile error where a complete value is required.                                                                                                                                                                                                                                            |
 | Flat producer directory                            | `generation/` owns the worker protocol, controller, and Wasm adapter; `metrics/` owns Decimal and accumulation. The facade, public contracts, settings policy, and error policy stay at the feature root. These are product sub-capabilities, not file-type buckets.                                                                                                                                                                                                                                                                                                                       |
 | Unsafe assertions and weak checks                  | Production, worker, and test code are type-checked by the locked quality command. Production enables `strict`, `strictTemplates`, `exactOptionalPropertyTypes`, and `noUncheckedIndexedAccess`. Indexing at the metric and snapshot boundaries now has explicit failure handling. Broad state and DOM assertions were replaced by typed initial states and runtime-checked test helpers. The remaining Decimal-string brand assertion follows canonical serialization, and `as const` preserves literal discriminants; `satisfies` cannot replace either without losing the intended type. |
 | Duplicate object guards                            | Settings validation, metric ingress, and worker protocol use one application-shared, domain-neutral `isRecord` guard.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Pending form outcome subscription                  | The Settings route now cancels its wait for a run acknowledgement when destroyed. A component test checks that the observable has no remaining subscriber after route teardown.                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 The table is capped at 50 rows by `TASK.md`. The current maximum-rate browser sample found no task
 over 50 ms in ten seconds and rendered all 50 semantic rows without page-width overflow. Virtual
@@ -79,7 +84,8 @@ measured render cost rises. This decision does not claim every device will meet 
 
 ## Remaining limits and delivery gate
 
-The production initial bundle is about 495 kB, close to the configured 500 kB warning threshold.
+The production initial bundle is about 502 kB raw and 117 kB estimated transfer size after adding
+exhaustive event matching. The initial warning budget is 510 kB; the 1 MB error budget is unchanged.
 The maximum-rate browser and worker measurements passed on the tested machine, but a different device
 or future UI dependency growth may need another profile. Browser behavior has manual acceptance
 evidence; an automated end-to-end suite is outside the assignment's required tests.

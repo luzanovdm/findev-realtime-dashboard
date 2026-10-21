@@ -69,78 +69,87 @@ export interface PaceChangedEvent {
 export type ProducerWorkerEvent =
   RunStartedEvent | SnapshotEvent | StatusChangedEvent | RunErrorEvent | PaceChangedEvent;
 
-export function isProducerWorkerCommand(value: unknown): value is ProducerWorkerCommand {
-  if (!isRecord(value) || !isRunId(value['runId'])) return false;
+type RecordValue = Readonly<Record<string, unknown>>;
+type ValueGuard = (value: unknown) => boolean;
+type RecordGuard = (value: RecordValue) => boolean;
+type FieldGuards = readonly (readonly [string, ValueGuard])[];
 
-  switch (value['type']) {
-    case 'start-run':
-      return (
-        isProducerSettings(value['settings']) &&
-        isSeed(value['seed']) &&
-        typeof value['wasmUrl'] === 'string' &&
-        value['wasmUrl'].trim().length > 0
-      );
-    case 'pause':
-    case 'resume':
-    case 'dispose':
-      return true;
-    default:
-      return false;
-  }
+const START_FIELDS: FieldGuards = Object.entries({
+  settings: isProducerSettings,
+  seed: isSeed,
+  wasmUrl: (value: unknown) => typeof value === 'string' && value.trim().length > 0,
+} satisfies Readonly<Record<'settings' | 'seed' | 'wasmUrl', ValueGuard>>);
+
+const SNAPSHOT_FIELDS: FieldGuards = Object.entries({
+  sequence: isRunId,
+  timestampMs: (value: unknown) =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0,
+  metrics: isMetricList,
+} satisfies Readonly<Record<'sequence' | 'timestampMs' | 'metrics', ValueGuard>>);
+
+const COMMAND_GUARDS = {
+  'start-run': (value: RecordValue) => validFields(value, START_FIELDS),
+  pause: () => true,
+  resume: () => true,
+  dispose: () => true,
+} satisfies Readonly<Record<ProducerWorkerCommand['type'], RecordGuard>>;
+
+const EVENT_GUARDS = {
+  'run-started': (value: RecordValue) => isProducerSettings(value['activeSettings']),
+  snapshot: (value: RecordValue) => validFields(value, SNAPSHOT_FIELDS),
+  'status-changed': (value: RecordValue) => isProducerStatus(value['status']),
+  'run-error': (value: RecordValue) => isProducerErrorCode(value['code']),
+  'pace-changed': (value: RecordValue) => typeof value['slow'] === 'boolean',
+} satisfies Readonly<Record<ProducerWorkerEvent['type'], RecordGuard>>;
+
+const COMMAND_GUARDS_BY_TYPE: ReadonlyMap<string, RecordGuard> = new Map(
+  Object.entries(COMMAND_GUARDS),
+);
+const EVENT_GUARDS_BY_TYPE: ReadonlyMap<string, RecordGuard> = new Map(
+  Object.entries(EVENT_GUARDS),
+);
+
+export function isProducerWorkerCommand(value: unknown): value is ProducerWorkerCommand {
+  return validMessage(value, COMMAND_GUARDS_BY_TYPE);
 }
 
 export function isProducerWorkerEvent(value: unknown): value is ProducerWorkerEvent {
-  if (!isRecord(value) || !isRunId(value['runId'])) return false;
+  return validMessage(value, EVENT_GUARDS_BY_TYPE);
+}
 
-  switch (value['type']) {
-    case 'run-started':
-      return isProducerSettings(value['activeSettings']);
-    case 'snapshot':
-      return (
-        isRunId(value['sequence']) &&
-        typeof value['timestampMs'] === 'number' &&
-        Number.isSafeInteger(value['timestampMs']) &&
-        value['timestampMs'] >= 0 &&
-        isMetricList(value['metrics'])
-      );
-    case 'status-changed':
-      return isProducerStatus(value['status']);
-    case 'run-error':
-      return isProducerErrorCode(value['code']);
-    case 'pace-changed':
-      return typeof value['slow'] === 'boolean';
-    default:
-      return false;
-  }
+function validMessage(value: unknown, guards: ReadonlyMap<string, RecordGuard>): boolean {
+  if (!isRecord(value) || !isRunId(value['runId'])) return false;
+  const type = value['type'];
+  return typeof type === 'string' && (guards.get(type)?.(value) ?? false);
+}
+
+function validFields(value: RecordValue, guards: FieldGuards): boolean {
+  return guards.every(([field, guard]) => guard(value[field]));
 }
 
 function isInstrumentMetricSnapshot(value: unknown): value is SerializedInstrumentMetricSnapshot {
   if (!isRecord(value)) return false;
+  return validFields(value, METRIC_FIELDS) && validMetricAvailability(value);
+}
 
-  if (
-    !isInstrumentSymbol(value['instrument']) ||
-    !isNullablePositiveDecimal(value['lastPriceCents']) ||
-    !isNullablePositiveDecimal(value['spreadCents']) ||
-    typeof value['volume'] !== 'bigint' ||
-    value['volume'] < 0n ||
-    !isNullablePositiveDecimal(value['vwapCents']) ||
-    !isNullableImbalance(value['imbalance'])
-  ) {
-    return false;
-  }
+const METRIC_FIELDS: FieldGuards = Object.entries({
+  instrument: isInstrumentSymbol,
+  lastPriceCents: isNullablePositiveDecimal,
+  spreadCents: isNullablePositiveDecimal,
+  volume: (value: unknown) => typeof value === 'bigint' && value >= 0n,
+  vwapCents: isNullablePositiveDecimal,
+  imbalance: isNullableImbalance,
+} satisfies Readonly<Record<keyof SerializedInstrumentMetricSnapshot, ValueGuard>>);
 
+const TRADE_METRIC_FIELDS = ['lastPriceCents', 'spreadCents', 'vwapCents'] as const;
+
+function validMetricAvailability(value: RecordValue): boolean {
   if (value['volume'] === 0n) {
     return (
-      value['lastPriceCents'] === null &&
-      value['spreadCents'] === null &&
-      value['vwapCents'] === null &&
-      value['imbalance'] === null
+      TRADE_METRIC_FIELDS.every((field) => value[field] === null) && value['imbalance'] === null
     );
   }
-
-  return (
-    value['lastPriceCents'] !== null && value['spreadCents'] !== null && value['vwapCents'] !== null
-  );
+  return TRADE_METRIC_FIELDS.every((field) => value[field] !== null);
 }
 
 function isMetricList(value: unknown): value is readonly SerializedInstrumentMetricSnapshot[] {

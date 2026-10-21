@@ -18,78 +18,21 @@ import {
   timer,
 } from 'rxjs';
 import type { Observable } from 'rxjs';
-import { fromNullableDecimalString } from './metrics/financial-decimal';
-import type {
-  InstrumentMetricSnapshot,
-  ProducerError,
-  ProducerErrorCode,
-  ProducerStatus,
-} from './market-producer.types';
-import { instrumentSymbol } from './market-producer.types';
-import { describeProducerError } from './producer-error';
 import {
   copyProducerSettings,
   DEFAULT_PRODUCER_SETTINGS,
   isProducerSettings,
-  sameProducerSettings,
 } from './producer-settings';
 import type { ProducerSettings } from './producer-settings';
 import { ProducerSettingsStorage } from './producer-settings-storage';
 import { isProducerWorkerEvent } from './generation/worker.protocol';
-import type { ProducerWorkerCommand, ProducerWorkerEvent } from './generation/worker.protocol';
+import type { ProducerWorkerCommand } from './generation/worker.protocol';
+import { controlDeadline, INITIAL_PRODUCER_STATE, reduceProducerState } from './producer-state';
+import type { ProducerAction, ProducerState } from './producer-state';
 
-const INITIALIZATION_DEADLINE_MS = 5_000;
-const COMMAND_DEADLINE_MS = 2_000;
 const LIVENESS_DEADLINE_MS = 5_000;
 
-interface ProducerState {
-  readonly runId: number;
-  readonly status: ProducerStatus;
-  readonly activeSettings: ProducerSettings;
-  readonly pendingSettings: ProducerSettings;
-  readonly metrics: readonly InstrumentMetricSnapshot[];
-  readonly error: ProducerError | null;
-  readonly stale: boolean;
-  readonly slow: boolean;
-  readonly snapshotAt: number | null;
-  readonly lastSequence: number;
-  readonly runAcknowledged: boolean;
-  readonly pendingControl: 'pause' | 'resume' | null;
-}
-
-type ProducerAction =
-  | { readonly type: 'begin'; readonly settings: ProducerSettings }
-  | { readonly type: 'control'; readonly control: 'pause' | 'resume' }
-  | { readonly type: 'worker-event'; readonly event: ProducerWorkerEvent }
-  | { readonly type: 'failure'; readonly code: ProducerErrorCode };
-
 export type RunOutcome = 'running' | 'error';
-
-function emptyMetrics(instrumentCount: number): readonly InstrumentMetricSnapshot[] {
-  return Array.from({ length: instrumentCount }, (_, index) => ({
-    instrument: instrumentSymbol(index),
-    lastPriceCents: null,
-    spreadCents: null,
-    volume: 0n,
-    vwapCents: null,
-    imbalance: null,
-  }));
-}
-
-const INITIAL_STATE: ProducerState = {
-  runId: 0,
-  status: 'initializing',
-  activeSettings: DEFAULT_PRODUCER_SETTINGS,
-  pendingSettings: DEFAULT_PRODUCER_SETTINGS,
-  metrics: emptyMetrics(DEFAULT_PRODUCER_SETTINGS.instrumentCount),
-  error: null,
-  stale: false,
-  slow: false,
-  snapshotAt: null,
-  lastSequence: 0,
-  runAcknowledged: false,
-  pendingControl: null,
-};
 
 @Injectable({ providedIn: 'root' })
 export class MarketProducerFacade {
@@ -99,8 +42,8 @@ export class MarketProducerFacade {
   private readonly settingsSaveState = signal<'saved' | 'unavailable' | null>(null);
   private readonly actions = new Subject<ProducerAction>();
   private readonly state$ = this.actions.pipe(
-    scan(reduceProducerState, INITIAL_STATE),
-    startWith(INITIAL_STATE),
+    scan(reduceProducerState, INITIAL_PRODUCER_STATE),
+    startWith(INITIAL_PRODUCER_STATE),
     shareReplay({ bufferSize: 1, refCount: false }),
   );
   private readonly state = toSignal(this.state$, { requireSync: true });
@@ -232,10 +175,10 @@ export class MarketProducerFacade {
   outcomeOf(runId: number): Observable<RunOutcome> {
     return this.state$.pipe(
       filter(
-        (state) =>
+        (state): state is ProducerState & { readonly status: RunOutcome } =>
           state.runId === runId && (state.status === 'running' || state.status === 'error'),
       ),
-      map((state): RunOutcome => (state.status === 'running' ? 'running' : 'error')),
+      map((state) => state.status),
       take(1),
     );
   }
@@ -314,133 +257,4 @@ export class MarketProducerFacade {
     this.terminateWorker();
     this.actions.complete();
   }
-}
-
-function controlDeadline(state: ProducerState): number | null {
-  if (state.runId === 0 || state.status === 'error') return null;
-  if (state.status === 'initializing') return INITIALIZATION_DEADLINE_MS;
-  if (state.pendingControl !== null) return COMMAND_DEADLINE_MS;
-  return null;
-}
-
-function reduceProducerState(state: ProducerState, action: ProducerAction): ProducerState {
-  if (action.type === 'begin') {
-    return {
-      ...state,
-      runId: state.runId + 1,
-      status: 'initializing',
-      pendingSettings: action.settings,
-      metrics: emptyMetrics(action.settings.instrumentCount),
-      error: null,
-      stale: false,
-      slow: false,
-      snapshotAt: null,
-      lastSequence: 0,
-      runAcknowledged: false,
-      pendingControl: null,
-    };
-  }
-  if (state.status === 'error') return state;
-  if (action.type === 'failure') return failedState(state, action.code);
-  if (action.type === 'control') {
-    if (
-      (action.control === 'pause' && state.status !== 'running') ||
-      (action.control === 'resume' && state.status !== 'paused') ||
-      state.pendingControl !== null
-    ) {
-      return state;
-    }
-    return { ...state, pendingControl: action.control };
-  }
-
-  const event = action.event;
-  switch (event.type) {
-    case 'run-started':
-      return !state.runAcknowledged &&
-        state.status === 'initializing' &&
-        sameProducerSettings(event.activeSettings, state.pendingSettings)
-        ? {
-            ...state,
-            runAcknowledged: true,
-            activeSettings: copyProducerSettings(event.activeSettings),
-          }
-        : failedState(state, 'protocol');
-    case 'status-changed':
-      if (event.status === 'initializing' && state.status === 'initializing') return state;
-      if (
-        event.status === 'running' &&
-        state.runAcknowledged &&
-        (state.status === 'initializing' ||
-          (state.status === 'paused' && state.pendingControl === 'resume'))
-      ) {
-        return { ...state, status: 'running', pendingControl: null };
-      }
-      if (
-        event.status === 'paused' &&
-        state.status === 'running' &&
-        state.pendingControl === 'pause'
-      ) {
-        return { ...state, status: 'paused', slow: false, pendingControl: null };
-      }
-      return failedState(state, 'protocol');
-    case 'snapshot':
-      if (
-        !state.runAcknowledged ||
-        state.status !== 'running' ||
-        event.sequence <= state.lastSequence ||
-        event.metrics.length !== state.activeSettings.instrumentCount ||
-        event.metrics.some((metric, index) => {
-          const previous = state.metrics[index];
-          return (
-            previous === undefined ||
-            metric.instrument !== instrumentSymbol(index) ||
-            metric.volume < previous.volume
-          );
-        }) ||
-        !event.metrics.some((metric, index) => {
-          const previous = state.metrics[index];
-          return previous !== undefined && metric.volume > previous.volume;
-        })
-      ) {
-        return failedState(state, 'protocol');
-      }
-      try {
-        return {
-          ...state,
-          metrics: event.metrics.map((metric) => ({
-            instrument: metric.instrument,
-            lastPriceCents: fromNullableDecimalString(metric.lastPriceCents),
-            spreadCents: fromNullableDecimalString(metric.spreadCents),
-            volume: metric.volume,
-            vwapCents: fromNullableDecimalString(metric.vwapCents),
-            imbalance: fromNullableDecimalString(metric.imbalance),
-          })),
-          lastSequence: event.sequence,
-          snapshotAt: event.timestampMs,
-        };
-      } catch {
-        return failedState(state, 'metric-failure');
-      }
-    case 'run-error':
-      return failedState(state, event.code);
-    case 'pace-changed':
-      return state.runAcknowledged && state.status === 'running'
-        ? { ...state, slow: event.slow }
-        : failedState(state, 'protocol');
-  }
-}
-
-function failedState(state: ProducerState, code: ProducerErrorCode): ProducerState {
-  const error = describeProducerError(code);
-  const hide = error.dataDisposition === 'hide';
-  return {
-    ...state,
-    status: 'error',
-    error,
-    metrics: hide ? emptyMetrics(state.pendingSettings.instrumentCount) : state.metrics,
-    snapshotAt: hide ? null : state.snapshotAt,
-    stale: !hide && state.snapshotAt !== null,
-    slow: false,
-    pendingControl: null,
-  };
 }

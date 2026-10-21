@@ -135,6 +135,10 @@ describe('Settings form', () => {
     expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
       'Saved in this browser',
     );
+
+    producer.status.set('error');
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[role="status"]')).toBeNull();
   });
 
   it('preserves an unsaved dirty draft when accepted settings change elsewhere', async () => {
@@ -203,5 +207,16 @@ describe('Settings form', () => {
     edit(fixture, 'instrument-count', '3');
     await fixture.whenStable();
     expect(fixture.componentInstance.visibleFormError()).toBeUndefined();
+  });
+
+  it('releases the pending run outcome when the settings route is destroyed', async () => {
+    const producer = fakeProducer();
+    const fixture = await createSettings(producer);
+    submitForm(fixture);
+    await fixture.whenStable();
+    expect(producer.outcomes.observed).toBe(true);
+
+    fixture.destroy();
+    expect(producer.outcomes.observed).toBe(false);
   });
 });

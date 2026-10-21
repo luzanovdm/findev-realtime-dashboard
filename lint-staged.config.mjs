@@ -1,4 +1,5 @@
 export default {
   '*': 'prettier --write --ignore-unknown',
-  'src/**/*.{ts,html}': 'eslint',
+  '{src,assembly}/**/*.ts': 'eslint',
+  'src/**/*.html': 'eslint',
 };

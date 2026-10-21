@@ -19,7 +19,7 @@
     "clean": "node scripts/clean.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint src",
+    "lint": "eslint src assembly",
     "lint:staged": "lint-staged",
     "commit": "commit",
     "commitlint": "commitlint",

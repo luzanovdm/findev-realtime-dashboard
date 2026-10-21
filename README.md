@@ -51,7 +51,7 @@ not rebuild AssemblyScript automatically.
 | `npm test`             | Run unit tests, then compiled Wasm and worker tests                  |
 | `npm run format`       | Format the project with Prettier                                     |
 | `npm run format:check` | Check project formatting                                             |
-| `npm run lint`         | Check Angular, templates, and architectural constraints              |
+| `npm run lint`         | Check Angular, AssemblyScript, templates, and architecture           |
 | `npm run typecheck`    | Type-check app, worker, and tests with strict TypeScript             |
 | `npm run commit`       | Create a guided Conventional Commit                                  |
 | `npm run audit`        | Check dependencies for high-severity vulnerabilities                 |
@@ -120,8 +120,9 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - Angular's global error handler exposes a fixed English recovery message for unexpected interface
   failures; the HTML shell has a fallback if application bootstrap fails before Angular renders.
 - EditorConfig, Prettier, and VS Code format-on-save settings with recommended extensions.
-- ESLint checks Angular source and templates, caps production files at 300 effective lines and
-  functions at 80, and enforces complexity, nesting, parameter, and feature-import boundaries.
+- ESLint checks Angular source, templates, and AssemblyScript, caps production files at 300
+  effective lines and functions at 80, and enforces complexity, nesting, parameter, and
+  feature-import boundaries.
 
 ## Producer flow
 

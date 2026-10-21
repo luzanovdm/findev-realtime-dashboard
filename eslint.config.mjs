@@ -2,6 +2,29 @@ import { defineConfig, globalIgnores } from 'eslint/config';
 import angular from 'angular-eslint';
 import tseslint from 'typescript-eslint';
 
+const PRODUCER_ROUTE_IMPORTS = {
+  group: [
+    '**/features/dashboard/**',
+    '**/features/settings/**',
+    '../dashboard/**',
+    '../settings/**',
+    '../../dashboard/**',
+    '../../settings/**',
+  ],
+  message: 'The producer cannot depend on route features.',
+};
+
+const SOURCE_SIZE_RULES = {
+  'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+  'max-lines-per-function': [
+    'error',
+    { max: 80, skipBlankLines: true, skipComments: true, IIFEs: true },
+  ],
+  complexity: ['error', 15],
+  'max-depth': ['error', 4],
+  'max-params': ['error', 5],
+};
+
 export default defineConfig([
   globalIgnores(['.angular/**', 'dist/**', 'node_modules/**', 'public/wasm/**']),
   {
@@ -15,16 +38,12 @@ export default defineConfig([
   {
     files: ['src/app/**/*.ts'],
     ignores: ['**/*.spec.ts'],
-    rules: {
-      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
-      'max-lines-per-function': [
-        'error',
-        { max: 80, skipBlankLines: true, skipComments: true, IIFEs: true },
-      ],
-      complexity: ['error', 15],
-      'max-depth': ['error', 4],
-      'max-params': ['error', 5],
-    },
+    rules: SOURCE_SIZE_RULES,
+  },
+  {
+    files: ['assembly/**/*.ts'],
+    extends: [...tseslint.configs.recommended],
+    rules: SOURCE_SIZE_RULES,
   },
   {
     files: ['src/app/core/**/*.ts'],
@@ -83,12 +102,24 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/app/features/market-producer/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [PRODUCER_ROUTE_IMPORTS],
+        },
+      ],
+    },
+  },
+  {
     files: ['src/app/features/market-producer/{generation,metrics}/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
+            PRODUCER_ROUTE_IMPORTS,
             {
               group: ['@angular/**', '@taiga-ui/**'],
               message: 'Worker-side producer code cannot depend on Angular or Taiga UI.',

@@ -60,7 +60,7 @@ export class ScaffoldConnection {
       try {
         const request: SmokeRequest = {
           type: 'smoke',
-          wasmUrl: new URL('wasm/scaffold.wasm', this.document.baseURI).href,
+          wasmUrl: new URL('wasm/market-generator.wasm', this.document.baseURI).href,
         };
         worker.postMessage(request);
       } catch (error: unknown) {

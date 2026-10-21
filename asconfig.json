@@ -1,7 +1,7 @@
 {
   "targets": {
     "release": {
-      "outFile": "public/wasm/scaffold.wasm",
+      "outFile": "public/wasm/market-generator.wasm",
       "optimizeLevel": 3,
       "shrinkLevel": 1
     }

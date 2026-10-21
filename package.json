@@ -14,7 +14,7 @@
     "test": "npm run test:unit && npm run test:smoke",
     "test:unit": "ng test --watch=false",
     "test:watch": "ng test",
-    "test:smoke": "npm run build && node --test tests/scaffold.test.mjs tests/wasm-abi.test.mjs",
+    "test:smoke": "npm run build && node --test tests/scaffold.test.mjs tests/wasm-abi.test.mjs tests/wasm-generator.test.mjs",
     "clean": "node scripts/clean.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

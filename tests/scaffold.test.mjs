@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
 const output = new URL('../dist/findev-realtime-dashboard/browser/', import.meta.url);
-const wasmUrl = new URL('wasm/scaffold.wasm', output);
+const wasmUrl = new URL('wasm/market-generator.wasm', output);
 
 test('compiled AssemblyScript smoke preserves a neutral integer', async () => {
   const bytes = await readFile(wasmUrl);
@@ -24,7 +24,7 @@ test(
     assert.equal(workers.length, 1, 'Angular must emit exactly one worker bundle');
     const wasm = await readFile(wasmUrl);
     const server = createServer((request, response) => {
-      if (request.url === '/wasm/scaffold.wasm') {
+      if (request.url === '/wasm/market-generator.wasm') {
         response.writeHead(200, { 'Content-Type': 'application/wasm' });
         response.end(wasm);
       } else {
@@ -39,7 +39,7 @@ test(
     const entry = new URL(workers[0], output).href;
 
     for (const [path, expectedType] of [
-      ['/wasm/scaffold.wasm', 'smoke-ok'],
+      ['/wasm/market-generator.wasm', 'smoke-ok'],
       ['/missing.wasm', 'smoke-error'],
     ]) {
       // Executes the ACTUAL Angular production worker bundle, not a mocked Wasm producer.

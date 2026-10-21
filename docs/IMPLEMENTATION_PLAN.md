@@ -106,7 +106,8 @@ asynchronous behavior.
 
 ### Work
 
-1. Replace the identity smoke function with the versioned exports defined by the architecture.
+1. Implement the versioned generator exports defined by the architecture. Keep the diagnostic
+   `smoke` export only until the production worker replaces that handshake in Phase 3.
 2. Reserve fixed memory for:
    - 50 per-instrument reference prices;
    - one 1,000-record output batch;

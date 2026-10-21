@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
-const wasmUrl = new URL('../public/wasm/scaffold.wasm', import.meta.url);
+const wasmUrl = new URL('../public/wasm/market-generator.wasm', import.meta.url);
 
 test('compiled Wasm exposes the versioned fixed-buffer ABI', async () => {
   const bytes = await readFile(wasmUrl);

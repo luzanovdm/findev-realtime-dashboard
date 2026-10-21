@@ -37,21 +37,21 @@ not rebuild AssemblyScript automatically.
 
 ## Commands
 
-| Command                | Purpose                                                                  |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `npm run build:wasm`   | Compile AssemblyScript to `public/wasm/scaffold.wasm`                    |
-| `npm run build`        | Compile Wasm, then create a production Angular build                     |
-| `npm run watch`        | Compile Wasm, then run the Angular development build in watch mode       |
-| `npm run test:unit`    | Run Angular/Vitest unit smoke tests in Node and jsdom                    |
-| `npm run test:watch`   | Run unit tests in watch mode                                             |
-| `npm run test:smoke`   | Run the production build and real Wasm/worker smoke tests over Node/HTTP |
-| `npm test`             | Run unit smoke tests, then worker/Wasm smoke tests                       |
-| `npm run format`       | Format the project with Prettier                                         |
-| `npm run format:check` | Check project formatting                                                 |
-| `npm run commit`       | Create a guided Conventional Commit                                      |
-| `npm run audit`        | Check dependencies for high-severity vulnerabilities                     |
-| `npm run check`        | Check formatting and run all available tests                             |
-| `npm run clean`        | Remove generated `dist`, `.angular/cache`, and `public/wasm` files       |
+| Command                | Purpose                                                              |
+| ---------------------- | -------------------------------------------------------------------- |
+| `npm run build:wasm`   | Compile AssemblyScript to `public/wasm/market-generator.wasm`        |
+| `npm run build`        | Compile Wasm, then create a production Angular build                 |
+| `npm run watch`        | Compile Wasm, then run the Angular development build in watch mode   |
+| `npm run test:unit`    | Run Angular/Vitest unit smoke tests in Node and jsdom                |
+| `npm run test:watch`   | Run unit tests in watch mode                                         |
+| `npm run test:smoke`   | Run the production build, compiled generator, and worker smoke tests |
+| `npm test`             | Run unit tests, then compiled Wasm and worker tests                  |
+| `npm run format`       | Format the project with Prettier                                     |
+| `npm run format:check` | Check project formatting                                             |
+| `npm run commit`       | Create a guided Conventional Commit                                  |
+| `npm run audit`        | Check dependencies for high-severity vulnerabilities                 |
+| `npm run check`        | Check formatting and run all available tests                         |
+| `npm run clean`        | Remove generated `dist`, `.angular/cache`, and `public/wasm` files   |
 
 Clean verification from scratch:
 
@@ -89,13 +89,14 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - Empty pages with explicit TODO markers. Forms, tables, and producer controls are not implemented.
 - Dashboard metrics, producer settings, and market updates are defined beside the feature that owns
   their behavior.
-- `assembly/index.ts` contains a real Wasm smoke function, `smoke(i32): i32`, that returns its
-  argument. It is not a market generator, randomness source, or metric calculator.
-- `features/market-producer/producer.worker.ts` loads and executes Wasm inside a worker and returns
-  explicit failures.
+- `assembly/index.ts` contains the stateful market-update generator. Its randomness, price walk,
+  instrument selection, trades, and order-book quantities run in Wasm; compiled-module tests cover
+  the ABI, batch sizes, invariants, deterministic seeds, state continuity, and memory stability.
+- `features/market-producer/producer.worker.ts` still uses a temporary `smoke` export for its
+  connection diagnostic. Connecting the generator to the worker is the next implementation phase.
 - `features/market-producer/scaffold-connection.ts` runs one short Angular → Worker → Wasm
-  diagnostic when the app shell is created, logs the result, and terminates the worker. It does not
-  start a producer or implement pause, resume, or reset state.
+  diagnostic when the app shell is created, surfaces a safe failure message, and terminates the
+  worker. It does not start a producer or implement pause, resume, or reset state.
 - EditorConfig, Prettier, and VS Code format-on-save settings with recommended extensions.
 
 ## Smoke-test flow
@@ -113,6 +114,8 @@ Angular production build in `node:worker_threads`. A small test adapter maps `po
 `addEventListener` to Node. The worker loads Wasm from a temporary HTTP server bound to
 `127.0.0.1` on an available port. The test covers a successful response and an HTTP 404 response,
 then closes the server and worker.
+
+`tests/wasm-abi.test.mjs` and `tests/wasm-generator.test.mjs` execute the compiled module directly.
 
 These tests prove compilation and transport in Node. They do not replace browser rendering or the
 assignment's acceptance tests. Browser and end-to-end checks are not automated. `it.todo` cases in

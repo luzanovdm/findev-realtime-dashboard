@@ -9,6 +9,7 @@
 | Upstream requirement | [TASK.md](../TASK.md)                                                                                              |
 | Related decision     | [ADR-0001: Use AssemblyScript for the market generator](decisions/0001-use-assemblyscript-for-market-generator.md) |
 | Downstream plan      | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)                                                                   |
+| Failure policy       | [ERROR_HANDLING.md](ERROR_HANDLING.md)                                                                             |
 
 Review this document when the assignment changes, the Wasm ABI changes, a second producer is added,
 the supported browser baseline changes, or measured performance invalidates the current budgets.
@@ -159,8 +160,8 @@ Command semantics:
 - **Apply:** validate settings in Angular, increment `runId`, clear visible metrics, and send an
   immutable settings snapshot. The worker cancels its timer, resets Wasm and metrics, enters
   `running`, and produces the first batch immediately. Apply always resumes a paused producer.
-- **Error:** stop scheduling. Existing values may remain visible but the error and stopped state must
-  be explicit. A valid Apply retries initialization as a new run.
+- **Error:** stop scheduling. Only a fully validated, last confirmed snapshot may remain visible,
+  marked stopped and stale. An integrity failure hides metrics. A valid Apply starts a new run.
 - **Teardown:** clear the timer, remove event handlers, and terminate the worker.
 
 The worker checks the current `runId` before and after every asynchronous boundary. The facade also
@@ -368,16 +369,18 @@ accounting or move generation onto the main thread.
 
 ## 11. Errors, cleanup, and recovery
 
-Errors have stable codes for `worker-unavailable`, `wasm-fetch`, `wasm-instantiate`, `wasm-abi`,
-`protocol`, and `generation`. User-visible text explains what failed and that Apply retries a new run.
-Technical causes may be logged in development without exposing arbitrary exception text in the UI.
+[ERROR_HANDLING.md](ERROR_HANDLING.md) owns the failure catalogue, severity levels, data-trust rules,
+recovery actions, user copy, liveness policy, and fault-injection matrix. The producer uses stable
+codes and fixed English messages. A worker event never carries a raw exception message for display.
 
-The worker stops its scheduler before publishing a fatal error. Apply creates a new run and retries.
-The facade removes listeners and terminates the worker on application teardown. Replacing a failed
-worker is a facade responsibility and must happen only after the old instance is terminated.
+The worker validates a complete Wasm batch before changing cumulative metrics. On a run error, it
+stops scheduling and may retain only a confirmed snapshot marked stale. An integrity-critical
+failure hides metrics. Apply creates a new `runId` and empty accumulator; it cannot resume unknown
+totals. The facade terminates crashed or timed-out workers before constructing a replacement.
 
-Server-side rendering is outside scope because the runtime requires browser Web Workers. The app
-must show a meaningful unsupported-runtime error when `Worker` or WebAssembly is unavailable.
+The facade removes listeners and terminates its worker on application teardown. Server-side
+rendering is outside scope because the runtime requires browser Web Workers. The app shows a
+meaningful unsupported-runtime error when `Worker` or WebAssembly is unavailable.
 
 ## 12. Build and deployment architecture
 

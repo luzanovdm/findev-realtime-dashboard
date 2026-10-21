@@ -11,6 +11,8 @@ The employer's original requirements are preserved in [TASK.md](TASK.md).
   work with tests and acceptance gates.
 - [ADR-0001](docs/decisions/0001-use-assemblyscript-for-market-generator.md) records the Wasm language,
   toolchain, runtime, memory, and interoperability decision.
+- [Producer failure policy](docs/ERROR_HANDLING.md) defines severity, data trust, recovery, and
+  user-visible errors.
 
 ## Environment and startup
 

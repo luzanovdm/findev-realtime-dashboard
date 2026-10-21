@@ -9,6 +9,7 @@
 | Requirement source  | [TASK.md](../TASK.md)                                                 |
 | Architecture source | [ARCHITECTURE.md](ARCHITECTURE.md)                                    |
 | Wasm decision       | [ADR-0001](decisions/0001-use-assemblyscript-for-market-generator.md) |
+| Failure policy      | [ERROR_HANDLING.md](ERROR_HANDLING.md)                                |
 
 This plan implements the assignment in reviewable vertical increments. Each phase ends with working
 evidence and leaves the application in a coherent state. A phase is complete only when its listed
@@ -79,8 +80,10 @@ asynchronous behavior.
 3. Define closed worker command and event unions carrying `runId`.
 4. Add runtime type guards for every command and event. Reject unknown keys only where strictness adds
    safety; always reject invalid discriminants, values, and ranges.
-5. Generate stable display symbols from instrument indexes in one producer-owned function.
-6. Remove scaffold names (`SmokeRequest`, `ScaffoldConnection`, `WasmScaffold`) as their real
+5. Add the fixed error catalogue and typed failure mapping from
+   [ERROR_HANDLING.md](ERROR_HANDLING.md). Worker events carry codes instead of raw exception text.
+6. Generate stable display symbols from instrument indexes in one producer-owned function.
+7. Remove scaffold names (`SmokeRequest`, `ScaffoldConnection`, `WasmScaffold`) as their real
    replacements land. Do not keep compatibility aliases.
 
 ### Tests
@@ -148,7 +151,8 @@ asynchronous behavior.
    - instantiates it once per worker;
    - validates exports and ABI version;
    - validates returned pointer ranges;
-   - decodes packed records.
+   - decodes packed records;
+   - classifies fetch, compile, ABI, trap, and invalid-record failures with stable codes.
 2. Implement a controller with explicit `initializing`, `running`, `paused`, and `error` transitions.
 3. Implement recursive one-shot scheduling. Schedule only after the current batch is decoded and
    accumulated.
@@ -157,8 +161,12 @@ asynchronous behavior.
 6. On Apply, cancel the old timer, reset Wasm and metrics, publish the new `runId`, and produce the
    first batch immediately.
 7. Check `runId` after Wasm fetch/instantiation and at every scheduled callback before publishing.
-8. Convert load, ABI, protocol, and generation failures to stable error codes and stop scheduling.
-9. Handle `dispose` idempotently.
+8. Validate each full batch before accumulator mutation, so a bad late record cannot partially change
+   volume or VWAP.
+9. Convert load, ABI, protocol, and generation failures to stable error codes and stop scheduling.
+10. Add bounded retries only for transient load failures before the first batch; never silently resume
+    a failed run.
+11. Handle `dispose` idempotently.
 
 ### Tests
 
@@ -172,6 +180,7 @@ asynchronous behavior.
   `runId`.
 - Late initialization, scheduled callbacks, and events from an old `runId` are discarded.
 - A thrown adapter error publishes one typed error and leaves no scheduled callback.
+- An invalid last record prevents the entire batch from reaching the accumulator.
 - Tests contain no real waits.
 
 ### Acceptance gate
@@ -229,8 +238,11 @@ asynchronous behavior.
 5. Implement `pause`, `resume`, and `apply` commands with allowed-state guards.
 6. Clear visible rows immediately when Apply creates a new run.
 7. Validate worker events and reject every noncurrent `runId` before updating signals.
-8. Terminate and detach the worker on application teardown.
-9. Replace the worker after a fatal worker-level failure only after terminating the failed instance.
+8. Keep a last confirmed snapshot with a stopped/stale label for run errors; hide metrics after
+   integrity-critical errors.
+9. Handle worker `error`, `messageerror`, command timeout, and visible-tab liveness timeout. Terminate
+   a failed worker before constructing another for a new run.
+10. Terminate and detach the worker on application teardown.
 
 ### Tests
 
@@ -240,6 +252,8 @@ asynchronous behavior.
 - Pause and Resume commands reflect allowed states.
 - Apply increments `runId`, clears metrics, updates settings after worker acknowledgement, and resumes.
 - Old `runId` snapshots and errors cannot overwrite the current state.
+- A malformed current-run snapshot is rejected atomically and classified as a protocol failure.
+- A dead worker cannot strand the UI in `initializing` or `running` indefinitely.
 - Teardown removes handlers and terminates once.
 - Unsupported Worker or WebAssembly produces a meaningful public error.
 
@@ -337,6 +351,8 @@ asynchronous behavior.
 6. Verify reloads of `/dashboard` and `/settings` in the production server configuration.
 7. Verify missing/invalid Wasm, invalid ABI, malformed worker messages, and worker crashes surface
    meaningful errors and stop generation.
+8. Verify that every failure path follows the severity, data display, action, and diagnostic rules
+   in [ERROR_HANDLING.md](ERROR_HANDLING.md).
 
 ### Acceptance gate
 

@@ -2,7 +2,7 @@
   <div class="shell">
     <header class="header">
       <a class="brand" routerLink="/dashboard">Findev <span>Realtime dashboard</span></a>
-      <span tuiBadge appearance="neutral">Scaffold</span>
+      <span tuiBadge appearance="neutral">{{ producer.status() }}</span>
     </header>
     <nav class="navigation" aria-label="Main navigation">
       <a
@@ -26,13 +26,14 @@
         >Settings</a
       >
     </nav>
-    @if (startupError(); as error) {
-      <div class="startup-error" role="alert" aria-live="assertive">
+    @if (producer.error(); as error) {
+      <div class="producer-error" role="alert" aria-live="assertive">
         <p>{{ error.message }}</p>
+        @if (producer.stale() && producer.snapshotAt(); as timestamp) {
+          <p>Last confirmed values are outdated. Updated {{ timestamp | date: 'mediumTime' }}.</p>
+        }
         @if (error.recoveryAction !== 'none') {
-          <button tuiButton type="button" size="s" (click)="retryInitialization()">
-            Retry initialization
-          </button>
+          <button tuiButton type="button" size="s" (click)="producer.retry()">Start new run</button>
         }
       </div>
     }

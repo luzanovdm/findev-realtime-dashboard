@@ -31,7 +31,7 @@
   background: var(--tui-background-accent-1);
   color: var(--tui-text-primary-on-accent-1);
 }
-.startup-error {
+.producer-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -43,7 +43,7 @@
   border-radius: 0.75rem;
   color: var(--tui-text-negative);
 }
-.startup-error p {
+.producer-error p {
   margin: 0;
 }
 @media (max-width: 40rem) {

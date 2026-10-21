@@ -165,13 +165,3 @@ function isNullableImbalance(value: unknown): boolean {
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-
-// Temporary infrastructure smoke protocol. Removed when the production worker controller lands.
-export interface SmokeRequest {
-  readonly type: 'smoke';
-  readonly wasmUrl: string;
-}
-
-export type SmokeResponse =
-  | { readonly type: 'smoke-ok'; readonly value: number }
-  | { readonly type: 'smoke-error'; readonly code: ProducerErrorCode };

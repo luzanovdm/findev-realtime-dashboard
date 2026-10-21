@@ -80,8 +80,3 @@ export function generateBatch(batchSize: i32): i32 {
   }
   return <i32>OUTPUT;
 }
-
-// Retained until the production worker replaces its scaffold handshake.
-export function smoke(value: i32): i32 {
-  return value;
-}

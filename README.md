@@ -1,6 +1,6 @@
-# Findev Realtime Dashboard Scaffold
+# Findev Realtime Dashboard
 
-**This is a starter project for completing the coding assignment, not a finished solution.**
+**The coding assignment is in progress.**
 The employer's original requirements are preserved in [TASK.md](TASK.md).
 
 ## Architecture and implementation plan
@@ -42,7 +42,7 @@ not rebuild AssemblyScript automatically.
 | `npm run build:wasm`   | Compile AssemblyScript to `public/wasm/market-generator.wasm`        |
 | `npm run build`        | Compile Wasm, then create a production Angular build                 |
 | `npm run watch`        | Compile Wasm, then run the Angular development build in watch mode   |
-| `npm run test:unit`    | Run Angular/Vitest unit smoke tests in Node and jsdom                |
+| `npm run test:unit`    | Run Angular/Vitest unit tests in Node and jsdom                      |
 | `npm run test:watch`   | Run unit tests in watch mode                                         |
 | `npm run test:smoke`   | Run the production build, compiled generator, and worker smoke tests |
 | `npm test`             | Run unit tests, then compiled Wasm and worker tests                  |
@@ -78,7 +78,7 @@ and the pre-push hook runs the complete project check. The GitHub Actions qualit
 runs only when manually dispatched. Automatic triggers will return before submission, excluding
 documentation-only changes. Dependabot checks npm and GitHub Actions updates weekly.
 
-## Prepared scaffold
+## Implementation status
 
 - Angular standalone components with strict TypeScript and two lazy routes: `/dashboard` and
   `/settings`.
@@ -86,7 +86,7 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
   contracts, and runtime code; the app shell contains only application composition and routing.
 - Taiga UI with `provideTaiga`, `tui-root`, the standard theme, local Manrope fonts, local SVG
   icons, navigation buttons, and badges. The UI has no CDN dependencies.
-- Empty pages with explicit TODO markers. Forms, tables, and producer controls are not implemented.
+- Dashboard and settings pages still need their forms, table, and controls.
 - Dashboard metrics, producer settings, and market updates are defined beside the feature that owns
   their behavior.
 - `MetricAccumulator` calculates exact Decimal prices and VWAP, bigint cumulative volume, spread,
@@ -94,29 +94,23 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - `assembly/index.ts` contains the stateful market-update generator. Its randomness, price walk,
   instrument selection, trades, and order-book quantities run in Wasm; compiled-module tests cover
   the ABI, batch sizes, invariants, deterministic seeds, state continuity, and memory stability.
-- `features/market-producer/producer.worker.ts` now runs the generator and Decimal metric accumulator
-  through an application-run protocol. It also keeps the temporary `smoke` path until the Angular
-  producer facade replaces the diagnostic connection.
-- `features/market-producer/scaffold-connection.ts` runs one short Angular → Worker → Wasm
-  diagnostic when the app shell is created, surfaces a safe failure message, and terminates the
-  worker. It does not start a producer or implement pause, resume, or reset state.
+- `features/market-producer/producer.worker.ts` runs the generator and Decimal metric accumulator
+  through an application-run protocol. It validates batches, schedules generation, and reports typed
+  failures.
+- The application-scoped producer facade owns the worker across route navigation, rejects stale runs,
+  and presents safe errors and recovery actions.
 - EditorConfig, Prettier, and VS Code format-on-save settings with recommended extensions.
 
-## Smoke-test flow
+## Producer flow
 
 ```text
-App → ScaffoldConnection → production Web Worker → fetch Wasm → smoke(42) → response → terminate
+App → MarketProducerFacade → Web Worker → Wasm updates → Decimal metrics → validated snapshots
 ```
 
 Wasm is loaded and executed only in the worker. Its URL is resolved from `document.baseURI`, so it
-respects the application's base href. Missing Web Worker support, network or compilation failures,
-missing exports, and timeouts produce explicit diagnostic errors.
-
-`tests/scaffold.test.mjs` executes the compiled `.wasm` and then the worker bundle produced by the
-Angular production build in `node:worker_threads`. A small test adapter maps `postMessage` and
-`addEventListener` to Node. The worker loads Wasm from a temporary HTTP server bound to
-`127.0.0.1` on an available port. The test covers a successful response and an HTTP 404 response,
-then closes the server and worker.
+respects the application's base href. The facade maps worker, network, ABI, protocol, and generation
+failures to fixed English messages, terminates failed workers, and offers a new run where recovery is
+possible.
 
 `tests/wasm-abi.test.mjs` and `tests/wasm-generator.test.mjs` execute the compiled module directly.
 `tests/producer-worker.test.mjs` runs the production worker bundle with the compiled Wasm asset,
@@ -128,20 +122,14 @@ the unit suite identify missing business-requirement coverage and do not count a
 
 ## Remaining implementation
 
-- Add a stateful market-update generator and randomness in Wasm, including the batch ABI and memory
-  ownership.
-- Calculate all metrics, cumulative volume, and VWAP, including unavailable values for zero
-  denominators and display formatting.
 - Build the form with integer and range validation, setting application, and new-run behavior.
-- Implement one producer lifecycle with pause, resume, reset, stale-run rejection, and resource
-  cleanup.
-- Add the instrument table, real status and errors, and responsive behavior under higher update
-  rates.
-- Add meaningful unit tests for every requirement in section 4 of `TASK.md`.
+- Add the instrument table, currency and imbalance formatting, Pause/Resume controls, and responsive
+  behavior under higher update rates.
+- Complete browser acceptance, performance and failure-path checks, and automatic deployment.
 
-The current AssemblyScript stub runtime uses a neutral function without allocations. The future
-generator must define memory ownership, runtime behavior, and resource cleanup. TypeScript types do
-not validate messages at runtime; the production protocol must handle that boundary explicitly.
+The AssemblyScript generator uses fixed memory and a non-collecting stub runtime; compiled-Wasm tests
+check that repeated maximum-size generation does not grow memory. Worker commands and events are
+validated at runtime before state changes.
 
 ## Versions and official references
 

@@ -23,13 +23,10 @@ import {
   timer,
 } from 'rxjs';
 import type { Observable, SchedulerLike, Subscription } from 'rxjs';
+import { match } from 'ts-pattern';
 import { isPositiveSafeInteger } from '../../../core/validation/integer-range';
-import {
-  accumulateMetricBatch,
-  createMetricState,
-  serializedMetricSnapshot,
-} from '../metrics/metric-accumulator';
-import type { MetricState } from '../metrics/metric-accumulator';
+import { createActiveState, pauseState, reduceBatch, resumeState } from './active-run-state';
+import type { ActiveState, RunClock } from './active-run-state';
 import { producerErrorCode, ProducerFault } from '../producer-error';
 import { ProducerErrorCode } from '../market-producer.types';
 import type { GeneratorPort } from './wasm-generator';
@@ -47,29 +44,27 @@ export interface ProducerDiagnostic {
   readonly cause?: unknown;
 }
 
-export interface ControllerDependencies {
+export interface ControllerDependencies extends RunClock {
   load(url: string, signal: AbortSignal): Promise<GeneratorPort>;
   emit(event: ProducerWorkerEvent): void;
   reportFailure?(diagnostic: ProducerDiagnostic): void;
   scheduler?: SchedulerLike;
-  now(): number;
-  timestampMs(): number;
 }
 
 type CommandInput =
   | { readonly kind: 'valid'; readonly command: ProducerWorkerCommand }
   | { readonly kind: 'malformed'; readonly runId: number | null };
 
-interface TransitionStreams {
-  start(command: StartRunCommand): Observable<ProducerWorkerEvent>;
-  protocolError(runId: number): Observable<ProducerWorkerEvent>;
-}
+type RouteTransition =
+  | { readonly kind: 'start'; readonly command: StartRunCommand }
+  | { readonly kind: 'protocol-error'; readonly runId: number }
+  | { readonly kind: 'dispose' };
 
 interface RouteState {
   readonly currentRunId: number;
   readonly protocolFailedRunId: number | null;
   readonly disposed: boolean;
-  readonly transition: Observable<ProducerWorkerEvent> | null;
+  readonly transition: RouteTransition | null;
 }
 
 type RunMode = 'running' | 'paused';
@@ -78,36 +73,12 @@ type ControlCommand = Extract<ProducerWorkerCommand, { type: 'pause' | 'resume' 
 const MODE_FOR_CONTROL = { pause: 'paused', resume: 'running' } as const satisfies Readonly<
   Record<ControlCommand['type'], RunMode>
 >;
-const MODE_BY_CONTROL: ReadonlyMap<string, RunMode> = new Map(Object.entries(MODE_FOR_CONTROL));
 
 interface ModeInput {
   readonly mode: RunMode;
   readonly initial: boolean;
 }
 type ActiveChange = (state: ActiveState) => ActiveState;
-
-interface ActiveState {
-  readonly metrics: MetricState;
-  readonly sequence: number;
-  readonly publishedSequence: number;
-  readonly lastPublishedAt: number | null;
-  readonly pace: PaceState;
-  readonly events: readonly ProducerWorkerEvent[];
-}
-
-interface PaceState {
-  readonly lastBatchAt: number | null;
-  readonly lateIntervals: number;
-  readonly timelyIntervals: number;
-  readonly slow: boolean;
-}
-
-const INITIAL_PACE: PaceState = {
-  lastBatchAt: null,
-  lateIntervals: 0,
-  timelyIntervals: 0,
-  slow: false,
-};
 
 interface EmissionState {
   readonly failedRunId: number | null;
@@ -135,25 +106,28 @@ export class ProducerController {
 
   constructor(private readonly dependencies: ControllerDependencies) {
     const commands = this.input.pipe(map(decodeCommand), share());
-    const transitions = {
-      start: (command: StartRunCommand) => this.run(command, commands),
-      protocolError: (runId: number) =>
-        defer(() => {
-          this.reportFailure({ code: ProducerErrorCode.Protocol, runId, stage: 'command' });
-          return of({ type: 'run-error', runId, code: ProducerErrorCode.Protocol } as const);
-        }),
-    } satisfies TransitionStreams;
     this.subscription = commands
       .pipe(
-        scan((state, input) => routeCommand(state, input, transitions), INITIAL_ROUTE_STATE),
+        scan(routeCommand, INITIAL_ROUTE_STATE),
         tap((state) => (this.currentRunId = state.currentRunId)),
         takeWhile((state) => !state.disposed, true),
         filter(
-          (state): state is RouteState & { transition: Observable<ProducerWorkerEvent> } =>
+          (state): state is RouteState & { transition: RouteTransition } =>
             state.transition !== null,
         ),
         map((state) => state.transition),
-        switchMap((transition) => transition),
+        switchMap((transition) =>
+          match(transition)
+            .with({ kind: 'start' }, ({ command }) => this.run(command, commands))
+            .with({ kind: 'protocol-error' }, ({ runId }) =>
+              defer(() => {
+                this.reportFailure({ code: ProducerErrorCode.Protocol, runId, stage: 'command' });
+                return of({ type: 'run-error', runId, code: ProducerErrorCode.Protocol } as const);
+              }),
+            )
+            .with({ kind: 'dispose' }, () => EMPTY)
+            .exhaustive(),
+        ),
         scan(deduplicateRunError, INITIAL_EMISSION_STATE),
         filter(
           (state): state is EmissionState & { event: ProducerWorkerEvent } => state.event !== null,
@@ -282,14 +256,7 @@ export class ProducerController {
       paused: () => of((state: ActiveState) => pauseState(state, command.runId, this.dependencies)),
     } satisfies Readonly<Record<RunMode, (input: ModeInput) => Observable<ActiveChange>>>;
 
-    const initial: ActiveState = {
-      metrics: createMetricState(command.settings.instrumentCount),
-      sequence: 0,
-      publishedSequence: 0,
-      lastPublishedAt: null,
-      pace: INITIAL_PACE,
-      events: [],
-    };
+    const initial = createActiveState(command.settings.instrumentCount);
     return modes.pipe(
       switchMap((input) => modeStreams[input.mode](input)),
       scan((state, change) => change(state), initial),
@@ -338,17 +305,16 @@ function controlModesForRun(
   return commands.pipe(
     filter((input): input is Extract<CommandInput, { kind: 'valid' }> => input.kind === 'valid'),
     map((input) => input.command),
-    filter((command) => command.runId === runId),
-    map((command) => MODE_BY_CONTROL.get(command.type)),
-    filter((mode): mode is RunMode => mode !== undefined),
+    filter((command): command is ControlCommand => isRunControl(command, runId)),
+    map((command) => MODE_FOR_CONTROL[command.type]),
   );
 }
 
-function routeCommand(
-  state: RouteState,
-  input: CommandInput,
-  transitions: TransitionStreams,
-): RouteState {
+function isRunControl(command: ProducerWorkerCommand, runId: number): command is ControlCommand {
+  return command.runId === runId && Object.hasOwn(MODE_FOR_CONTROL, command.type);
+}
+
+function routeCommand(state: RouteState, input: CommandInput): RouteState {
   if (state.disposed) return { ...state, transition: null };
   if (input.kind === 'malformed') {
     if (
@@ -362,7 +328,7 @@ function routeCommand(
       currentRunId: input.runId,
       protocolFailedRunId: input.runId,
       disposed: false,
-      transition: transitions.protocolError(input.runId),
+      transition: { kind: 'protocol-error', runId: input.runId },
     };
   }
 
@@ -372,11 +338,11 @@ function routeCommand(
       currentRunId: command.runId,
       protocolFailedRunId: null,
       disposed: false,
-      transition: transitions.start(command),
+      transition: { kind: 'start', command },
     };
   }
   if (command.type === 'dispose' && command.runId === state.currentRunId) {
-    return { ...state, disposed: true, transition: EMPTY };
+    return { ...state, disposed: true, transition: { kind: 'dispose' } };
   }
   return { ...state, transition: null };
 }
@@ -385,97 +351,4 @@ function deduplicateRunError(state: EmissionState, event: ProducerWorkerEvent): 
   if (event.type !== 'run-error') return { ...state, event };
   if (state.failedRunId === event.runId) return { ...state, event: null };
   return { failedRunId: event.runId, event };
-}
-
-function resumeState(state: ActiveState, runId: number): ActiveState {
-  return {
-    ...state,
-    pace: INITIAL_PACE,
-    events: [{ type: 'status-changed', runId, status: 'running' }],
-  };
-}
-
-function pauseState(
-  state: ActiveState,
-  runId: number,
-  dependencies: ControllerDependencies,
-): ActiveState {
-  const publishPending = state.sequence > state.publishedSequence;
-  const events = [
-    { include: publishPending, create: () => makeSnapshot(state, runId, dependencies) },
-    {
-      include: state.pace.slow,
-      create: (): ProducerWorkerEvent => ({ type: 'pace-changed', runId, slow: false }),
-    },
-    {
-      include: true,
-      create: (): ProducerWorkerEvent => ({ type: 'status-changed', runId, status: 'paused' }),
-    },
-  ]
-    .filter(({ include }) => include)
-    .map(({ create }) => create());
-  return {
-    ...state,
-    publishedSequence: state.sequence,
-    lastPublishedAt: publishPending ? dependencies.now() : state.lastPublishedAt,
-    pace: INITIAL_PACE,
-    events,
-  };
-}
-
-function reduceBatch(
-  state: ActiveState,
-  updates: ReturnType<GeneratorPort['generateBatch']>,
-  runId: number,
-  batchSize: number,
-  intervalMs: number,
-  dependencies: ControllerDependencies,
-): ActiveState {
-  if (updates.length !== batchSize) throw new ProducerFault(ProducerErrorCode.Protocol);
-  const metrics = accumulateMetricBatch(state.metrics, updates);
-  const sequence = state.sequence + 1;
-  const now = dependencies.now();
-  const pace = measurePace(state.pace, now, intervalMs);
-  const publish = state.lastPublishedAt === null || now - state.lastPublishedAt >= 100;
-  const next = { ...state, metrics, pace, sequence };
-  const events = [
-    { include: publish, create: () => makeSnapshot(next, runId, dependencies) },
-    {
-      include: pace.slow !== state.pace.slow,
-      create: (): ProducerWorkerEvent => ({ type: 'pace-changed', runId, slow: pace.slow }),
-    },
-  ]
-    .filter(({ include }) => include)
-    .map(({ create }) => create());
-  return {
-    ...next,
-    publishedSequence: publish ? sequence : state.publishedSequence,
-    lastPublishedAt: publish ? now : state.lastPublishedAt,
-    events,
-  };
-}
-
-function measurePace(previous: PaceState, now: number, intervalMs: number): PaceState {
-  if (previous.lastBatchAt === null) return { ...INITIAL_PACE, lastBatchAt: now };
-
-  const late = now - previous.lastBatchAt > intervalMs * 2;
-  const lateIntervals = late ? previous.lateIntervals + 1 : 0;
-  const timelyIntervals = late ? 0 : previous.timelyIntervals + 1;
-  const slow = lateIntervals >= 5 || (previous.slow && timelyIntervals < 5);
-
-  return { lastBatchAt: now, lateIntervals, timelyIntervals, slow };
-}
-
-function makeSnapshot(
-  state: ActiveState,
-  runId: number,
-  dependencies: ControllerDependencies,
-): ProducerWorkerEvent {
-  return {
-    type: 'snapshot',
-    runId,
-    sequence: state.sequence,
-    timestampMs: dependencies.timestampMs(),
-    metrics: serializedMetricSnapshot(state.metrics),
-  };
 }

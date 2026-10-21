@@ -82,7 +82,10 @@ export class MarketGenerator implements GeneratorPort {
       pointer % Int32Array.BYTES_PER_ELEMENT !== 0 ||
       pointer + byteCount > buffer.byteLength
     ) {
-      throw new ProducerFault('wasm-abi');
+      throw new ProducerFault('wasm-abi', {
+        expected: 'an aligned pointer to the complete output batch',
+        observed: { pointer, byteCount, memoryBytes: buffer.byteLength },
+      });
     }
 
     const view = new DataView(buffer, pointer, byteCount);
@@ -108,7 +111,19 @@ export class MarketGenerator implements GeneratorPort {
         bidQuantity < 0 ||
         askQuantity < 0
       ) {
-        throw new ProducerFault('invalid-update');
+        throw new ProducerFault('invalid-update', {
+          record,
+          expected: 'a valid trade and bid/ask snapshot',
+          observed: {
+            instrumentIndex,
+            priceCents,
+            tradeQuantity,
+            bidCents,
+            askCents,
+            bidQuantity,
+            askQuantity,
+          },
+        });
       }
 
       updates.push({

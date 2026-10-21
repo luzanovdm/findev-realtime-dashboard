@@ -9,6 +9,7 @@ import { Dashboard } from './dashboard';
 function fakeProducer() {
   const status = signal<'initializing' | 'running' | 'paused' | 'error'>('initializing');
   const stale = signal(false);
+  const slow = signal(false);
   const metrics = signal<readonly InstrumentMetricSnapshot[]>([
     {
       instrument: 'ASSET-01',
@@ -23,7 +24,7 @@ function fakeProducer() {
   const canResume = computed(() => status() === 'paused');
   const pause = vi.fn(() => status.set('paused'));
   const resume = vi.fn(() => status.set('running'));
-  return { status, stale, metrics, canPause, canResume, pause, resume };
+  return { status, stale, slow, metrics, canPause, canResume, pause, resume };
 }
 
 async function createDashboard(producer: ReturnType<typeof fakeProducer>) {
@@ -128,5 +129,21 @@ describe('Dashboard', () => {
       true,
     );
     expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
+
+  it('shows a nonblocking warning while the worker reports sustained slow delivery', async () => {
+    const producer = fakeProducer();
+    producer.status.set('running');
+    const fixture = await createDashboard(producer);
+    producer.slow.set(true);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'more slowly than the requested interval',
+    );
+    producer.slow.set(false);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).not.toContain(
+      'more slowly than the requested interval',
+    );
   });
 });

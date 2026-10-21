@@ -114,6 +114,21 @@ describe('MarketProducerFacade', () => {
     expect(FakeWorker.instances).toHaveLength(1);
   });
 
+  it('keeps a slow-delivery warning separate from producer status and resets it on Apply', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    const worker = FakeWorker.instances[0];
+    acknowledgedRun(worker);
+    worker.emit({ type: 'pace-changed', runId: 1, slow: true });
+    expect(facade.status()).toBe('running');
+    expect(facade.slow()).toBe(true);
+    facade.pause();
+    worker.emit({ type: 'status-changed', runId: 1, status: 'paused' });
+    expect(facade.slow()).toBe(false);
+    facade.apply(DEFAULT_PRODUCER_SETTINGS);
+    expect(facade.slow()).toBe(false);
+  });
+
   it('clears rows on Apply and ignores old-run replies', () => {
     const facade = TestBed.inject(MarketProducerFacade);
     facade.start();
@@ -125,11 +140,14 @@ describe('MarketProducerFacade', () => {
     expect(facade.runId()).toBe(2);
     expect(facade.metrics()).toHaveLength(2);
     expect(facade.metrics()[0].volume).toBe(0n);
+    const outcomes: string[] = [];
+    facade.outcomeOf(2).subscribe((outcome) => outcomes.push(outcome));
     worker.emit(snapshot(1));
     expect(facade.status()).toBe('initializing');
     acknowledgedRun(worker, 2, nextSettings);
     worker.emit(snapshot(2, 2));
     expect(facade.metrics()[0].volume).toBe(30n);
+    expect(outcomes).toEqual(['running']);
     expect(FakeWorker.instances).toHaveLength(1);
   });
 
@@ -148,6 +166,19 @@ describe('MarketProducerFacade', () => {
 
     expect(facade.apply(DEFAULT_PRODUCER_SETTINGS)).toBe(true);
     expect(FakeWorker.instances).toHaveLength(2);
+    expect(facade.metrics()[0].volume).toBe(0n);
+  });
+
+  it('reports a failed new run to its awaiting form without accepting stale data', () => {
+    const facade = TestBed.inject(MarketProducerFacade);
+    facade.start();
+    const worker = FakeWorker.instances[0];
+    acknowledgedRun(worker);
+    facade.apply(DEFAULT_PRODUCER_SETTINGS);
+    const outcomes: string[] = [];
+    facade.outcomeOf(2).subscribe((outcome) => outcomes.push(outcome));
+    worker.emit({ type: 'run-error', runId: 2, code: 'wasm-fetch' });
+    expect(outcomes).toEqual(['error']);
     expect(facade.metrics()[0].volume).toBe(0n);
   });
 

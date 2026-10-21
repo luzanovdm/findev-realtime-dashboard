@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTaiga } from '@taiga-ui/core';
+import { Subject } from 'rxjs';
 import { MarketProducerFacade } from '../market-producer/market-producer.facade';
 import { DEFAULT_PRODUCER_SETTINGS } from '../market-producer/producer-settings';
 import { Settings } from './settings';
@@ -10,12 +11,14 @@ function fakeProducer() {
   const status = signal<'running' | 'paused' | 'initializing' | 'error'>('running');
   const runId = signal(1);
   const error = signal(null);
+  const outcomes = new Subject<'running' | 'error'>();
   const apply = vi.fn((settings: typeof DEFAULT_PRODUCER_SETTINGS) => {
     runId.update((id) => id + 1);
     status.set('initializing');
     return true;
   });
-  return { activeSettings, status, runId, error, apply };
+  const outcomeOf = vi.fn(() => outcomes.asObservable());
+  return { activeSettings, status, runId, error, apply, outcomeOf, outcomes };
 }
 
 async function createSettings(producer: ReturnType<typeof fakeProducer>) {
@@ -114,6 +117,7 @@ describe('Settings form', () => {
 
     producer.activeSettings.set({ instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 });
     producer.status.set('running');
+    producer.outcomes.next('running');
     await fixture.whenStable();
     expect(fixture.componentInstance.settingsForm().dirty()).toBe(false);
     expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
@@ -127,5 +131,34 @@ describe('Settings form', () => {
     producer.activeSettings.set({ instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 });
     await fixture.whenStable();
     expect(fixture.componentInstance.draft().instrumentCount).toBe('3');
+  });
+
+  it('refreshes a pristine draft when accepted settings change elsewhere', async () => {
+    const producer = fakeProducer();
+    const fixture = await createSettings(producer);
+    producer.activeSettings.set({ instrumentCount: 2, updatesPerBatch: 10, batchIntervalMs: 50 });
+    await fixture.whenStable();
+    expect(fixture.componentInstance.draft()).toEqual({
+      instrumentCount: '2',
+      updatesPerBatch: '10',
+      batchIntervalMs: '50',
+    });
+    expect(fixture.componentInstance.settingsForm().dirty()).toBe(false);
+  });
+
+  it('keeps the submitted draft and explains a failed new run', async () => {
+    const producer = fakeProducer();
+    const fixture = await createSettings(producer);
+    edit(fixture, 'instrument-count', '2');
+    await fixture.whenStable();
+    submitForm(fixture);
+    await fixture.whenStable();
+    producer.status.set('error');
+    producer.outcomes.next('error');
+    await fixture.whenStable();
+    expect(fixture.componentInstance.draft().instrumentCount).toBe('2');
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
+      'The new run could not start',
+    );
   });
 });

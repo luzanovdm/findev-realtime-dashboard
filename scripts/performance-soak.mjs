@@ -112,7 +112,12 @@ try {
   const activeSeconds = (pauseSentAt - startedAt) / 1_000;
   const runningSnapshots = snapshots.filter((snapshot) => snapshot.at < pauseSentAt);
   const snapshotRate = runningSnapshots.length / activeSeconds;
-  const intervals = runningSnapshots
+  const workerIntervals = runningSnapshots
+    .slice(1)
+    .map(
+      (snapshot, index) => snapshot.event.timestampMs - runningSnapshots[index].event.timestampMs,
+    );
+  const deliveryIntervals = runningSnapshots
     .slice(1)
     .map((snapshot, index) => snapshot.at - runningSnapshots[index].at);
   const measuredHeap = memory.map(({ atMs, heap }) => ({
@@ -128,7 +133,8 @@ try {
         runningSnapshots: runningSnapshots.length,
         finalSnapshots: snapshots.length,
         averageSnapshotRateHz: Number(snapshotRate.toFixed(2)),
-        shortestSnapshotIntervalMs: Math.round(Math.min(...intervals)),
+        shortestWorkerSnapshotIntervalMs: Math.min(...workerIntervals),
+        shortestObservedDeliveryIntervalMs: Math.round(Math.min(...deliveryIntervals)),
         pauseLatencyMs: Math.round(pauseLatencyMs),
         workerHeapSamples: measuredHeap,
       },

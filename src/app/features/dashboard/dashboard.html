@@ -31,6 +31,9 @@
   @if (producer.stale()) {
     Last confirmed values are outdated.
   }
+  @if (producer.slow()) {
+    Updates are arriving more slowly than the requested interval.
+  }
 </p>
 
 <div class="table-scroll" role="region" aria-label="Instrument metrics" tabindex="0">

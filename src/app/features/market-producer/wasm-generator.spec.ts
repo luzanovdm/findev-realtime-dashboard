@@ -54,6 +54,20 @@ describe('market generator adapter', () => {
     );
   });
 
+  it('classifies a generation trap without returning a partial batch', () => {
+    const generator = new MarketGenerator({
+      memory: new WebAssembly.Memory({ initial: 1 }),
+      initialize: () => 0,
+      generateBatch: () => {
+        throw new WebAssembly.RuntimeError('test trap');
+      },
+    });
+    generator.initialize(1, 1);
+    expect(() => generator.generateBatch(1)).toThrowError(
+      expect.objectContaining({ code: 'generation' }),
+    );
+  });
+
   it('does not retry a missing asset', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
     vi.stubGlobal('fetch', fetchMock);

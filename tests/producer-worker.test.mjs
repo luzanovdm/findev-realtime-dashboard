@@ -50,7 +50,9 @@ test(
     const origin = `http://127.0.0.1:${server.address().port}`;
     const worker = new Worker(new URL('./web-worker-node-adapter.mjs', import.meta.url), {
       workerData: { entry: new URL(workers[0], output).href },
+      stderr: true,
     });
+    worker.stderr.resume();
     t.after(async () => {
       await worker.terminate();
       await new Promise((resolve) => server.close(resolve));

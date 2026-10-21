@@ -59,8 +59,14 @@ export interface RunErrorEvent {
   readonly code: ProducerErrorCode;
 }
 
+export interface PaceChangedEvent {
+  readonly type: 'pace-changed';
+  readonly runId: number;
+  readonly slow: boolean;
+}
+
 export type ProducerWorkerEvent =
-  RunStartedEvent | SnapshotEvent | StatusChangedEvent | RunErrorEvent;
+  RunStartedEvent | SnapshotEvent | StatusChangedEvent | RunErrorEvent | PaceChangedEvent;
 
 export function isProducerWorkerCommand(value: unknown): value is ProducerWorkerCommand {
   if (!isRecord(value) || !isRunId(value['runId'])) return false;
@@ -100,6 +106,8 @@ export function isProducerWorkerEvent(value: unknown): value is ProducerWorkerEv
       return isProducerStatus(value['status']);
     case 'run-error':
       return isProducerErrorCode(value['code']);
+    case 'pace-changed':
+      return typeof value['slow'] === 'boolean';
     default:
       return false;
   }

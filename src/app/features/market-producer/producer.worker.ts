@@ -6,6 +6,7 @@ import type { ProducerWorkerEvent } from './worker.protocol';
 const controller = new ProducerController({
   load: loadMarketGenerator,
   emit: send,
+  reportFailure: (diagnostic) => console.error('Market producer failure', diagnostic),
   now: () => performance.now(),
   timestampMs: () => Date.now(),
 });

@@ -26,7 +26,7 @@ function update(priceCents = '100'): MarketUpdate {
   };
 }
 
-function harness(generator?: GeneratorPort) {
+function harness(generator?: GeneratorPort, now?: (scheduler: VirtualTimeScheduler) => number) {
   const events: ProducerWorkerEvent[] = [];
   const scheduler = new VirtualTimeScheduler();
   const activeGenerator: GeneratorPort = generator ?? {
@@ -34,11 +34,13 @@ function harness(generator?: GeneratorPort) {
     generateBatch: vi.fn(() => [update()]),
   };
   const load = vi.fn().mockResolvedValue(activeGenerator);
+  const reportFailure = vi.fn();
   const controller = new ProducerController({
     load,
     emit: (event) => events.push(event),
+    reportFailure,
     scheduler,
-    now: () => scheduler.now(),
+    now: () => now?.(scheduler) ?? scheduler.now(),
     timestampMs: () => 1000 + scheduler.now(),
   });
   const advanceBy = (durationMs: number): void => {
@@ -47,7 +49,7 @@ function harness(generator?: GeneratorPort) {
     scheduler.flush();
     scheduler.frame = target;
   };
-  return { controller, events, load, generator: activeGenerator, advanceBy };
+  return { controller, events, load, reportFailure, generator: activeGenerator, advanceBy };
 }
 
 async function startDefault(controller: ProducerController): Promise<void> {
@@ -105,6 +107,31 @@ describe('ProducerController', () => {
     expect(snapshots).toHaveLength(2);
     expect(snapshots[1].sequence).toBe(3);
     expect(snapshots[1].metrics[0].volume).toBe(3n);
+  });
+
+  it('warns only after sustained slow batches and clears after recovery', async () => {
+    let processingTime = 0;
+    let delayed = true;
+    const generator: GeneratorPort = {
+      initialize: vi.fn(),
+      generateBatch: vi.fn(() => {
+        if (delayed) processingTime += 100;
+        return [update()];
+      }),
+    };
+    const h = harness(generator, (scheduler) => scheduler.now() + processingTime);
+    await startDefault(h.controller);
+    h.advanceBy(250);
+    expect(h.events.filter((event) => event.type === 'pace-changed')).toEqual([
+      { type: 'pace-changed', runId: 1, slow: true },
+    ]);
+
+    delayed = false;
+    h.advanceBy(250);
+    expect(h.events.filter((event) => event.type === 'pace-changed')).toEqual([
+      { type: 'pace-changed', runId: 1, slow: true },
+      { type: 'pace-changed', runId: 1, slow: false },
+    ]);
   });
 
   it('cancels old generation when Apply starts a new run', async () => {
@@ -178,6 +205,9 @@ describe('ProducerController', () => {
     expect(h.events.filter((event) => event.type === 'run-error')).toEqual([
       { type: 'run-error', runId: 1, code: 'invalid-update' },
     ]);
+    expect(h.reportFailure).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ code: 'invalid-update', runId: 1, stage: 'generation' }),
+    );
     h.advanceBy(200);
     expect(generator.generateBatch).toHaveBeenCalledTimes(2);
     h.controller.dispatch({ type: 'pause', runId: 1 });
@@ -188,9 +218,11 @@ describe('ProducerController', () => {
     const h = harness();
     await startDefault(h.controller);
     h.controller.dispatch({ type: 'unknown', runId: 1 });
+    h.controller.dispatch({ type: 'unknown', runId: 1 });
     expect(h.events.filter((event) => event.type === 'run-error')).toEqual([
       { type: 'run-error', runId: 1, code: 'protocol' },
     ]);
+    expect(h.reportFailure).toHaveBeenCalledTimes(1);
     h.controller.dispatch({ type: 'dispose', runId: 1 });
     h.controller.dispatch({ type: 'dispose', runId: 1 });
     h.advanceBy(200);

@@ -14,6 +14,14 @@ export function draftFromSettings(settings: ProducerSettings): SettingsDraft {
   };
 }
 
+export function sameSettingsDraft(first: SettingsDraft, second: SettingsDraft): boolean {
+  return (
+    first.instrumentCount === second.instrumentCount &&
+    first.updatesPerBatch === second.updatesPerBatch &&
+    first.batchIntervalMs === second.batchIntervalMs
+  );
+}
+
 export function draftFieldError(field: ProducerSettingName, rawValue: string): string | null {
   const value = rawValue.trim();
   if (value.length === 0) return 'Enter a value.';

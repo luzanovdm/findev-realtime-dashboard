@@ -64,6 +64,7 @@ describe('producer worker protocol', () => {
         code: 'generation',
       }),
     ).toBe(true);
+    expect(isProducerWorkerEvent({ type: 'pace-changed', runId: 1, slow: true })).toBe(true);
   });
 
   it.each([
@@ -79,6 +80,7 @@ describe('producer worker protocol', () => {
     { type: 'status-changed', runId: 1, status: 'stopped' },
     { type: 'run-error', runId: 1, code: 'unknown' },
     { type: 'run-error', runId: 1, error: { code: 'generation', message: '' } },
+    { type: 'pace-changed', runId: 1, slow: 'yes' },
     { ...validSnapshot, runId: 0 },
   ])('rejects an invalid event: %o', (event) => {
     expect(isProducerWorkerEvent(event)).toBe(false);

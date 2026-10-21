@@ -14,8 +14,10 @@ import {
   startWith,
   Subject,
   switchMap,
+  take,
   timer,
 } from 'rxjs';
+import type { Observable } from 'rxjs';
 import { financialDecimal } from './financial-decimal';
 import type {
   InstrumentMetricSnapshot,
@@ -46,6 +48,7 @@ interface ProducerState {
   readonly metrics: readonly InstrumentMetricSnapshot[];
   readonly error: ProducerError | null;
   readonly stale: boolean;
+  readonly slow: boolean;
   readonly snapshotAt: number | null;
   readonly lastSequence: number;
   readonly runAcknowledged: boolean;
@@ -57,6 +60,8 @@ type ProducerAction =
   | { readonly type: 'control'; readonly control: 'pause' | 'resume' }
   | { readonly type: 'worker-event'; readonly event: ProducerWorkerEvent }
   | { readonly type: 'failure'; readonly code: ProducerErrorCode };
+
+export type RunOutcome = 'running' | 'error';
 
 function emptyMetrics(instrumentCount: number): readonly InstrumentMetricSnapshot[] {
   return Array.from({ length: instrumentCount }, (_, index) => ({
@@ -77,6 +82,7 @@ const INITIAL_STATE: ProducerState = {
   metrics: emptyMetrics(DEFAULT_PRODUCER_SETTINGS.instrumentCount),
   error: null,
   stale: false,
+  slow: false,
   snapshotAt: null,
   lastSequence: 0,
   runAcknowledged: false,
@@ -100,6 +106,7 @@ export class MarketProducerFacade {
   readonly metrics = computed(() => this.state().metrics);
   readonly error = computed(() => this.state().error);
   readonly stale = computed(() => this.state().stale);
+  readonly slow = computed(() => this.state().slow);
   readonly snapshotAt = computed(() => this.state().snapshotAt);
   readonly runId = computed(() => this.state().runId);
   readonly canPause = computed(
@@ -118,24 +125,14 @@ export class MarketProducerFacade {
       .pipe(
         map((state) => ({
           runId: state.runId,
-          status: state.status,
-          pendingControl: state.pendingControl,
+          deadlineMs: controlDeadline(state),
         })),
         distinctUntilChanged(
-          (before, after) =>
-            before.runId === after.runId &&
-            before.status === after.status &&
-            before.pendingControl === after.pendingControl,
+          (before, after) => before.runId === after.runId && before.deadlineMs === after.deadlineMs,
         ),
-        switchMap(({ runId, status, pendingControl }) => {
-          if (runId === 0 || status === 'error') return EMPTY;
-          const delayMs =
-            status === 'initializing'
-              ? INITIALIZATION_DEADLINE_MS
-              : pendingControl === null
-                ? null
-                : COMMAND_DEADLINE_MS;
-          return delayMs === null ? EMPTY : timer(delayMs).pipe(map(() => runId));
+        switchMap(({ runId, deadlineMs }) => {
+          if (deadlineMs === null) return EMPTY;
+          return timer(deadlineMs).pipe(map(() => runId));
         }),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -178,7 +175,15 @@ export class MarketProducerFacade {
         filter(([before, after]) => before.status !== 'error' && after.status === 'error'),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe(() => this.terminateWorker());
+      .subscribe(([before, after]) => {
+        console.error('Market producer stopped', {
+          code: after.error?.code,
+          runId: after.runId,
+          previousStatus: before.status,
+          lastSequence: before.lastSequence,
+        });
+        this.terminateWorker();
+      });
     this.destroyRef.onDestroy(() => this.dispose());
   }
 
@@ -216,6 +221,17 @@ export class MarketProducerFacade {
 
   retry(): boolean {
     return this.apply(this.state().pendingSettings);
+  }
+
+  outcomeOf(runId: number): Observable<RunOutcome> {
+    return this.state$.pipe(
+      filter(
+        (state) =>
+          state.runId === runId && (state.status === 'running' || state.status === 'error'),
+      ),
+      map((state): RunOutcome => (state.status === 'running' ? 'running' : 'error')),
+      take(1),
+    );
   }
 
   private beginRun(settings: ProducerSettings): void {
@@ -292,6 +308,13 @@ export class MarketProducerFacade {
   }
 }
 
+function controlDeadline(state: ProducerState): number | null {
+  if (state.runId === 0 || state.status === 'error') return null;
+  if (state.status === 'initializing') return INITIALIZATION_DEADLINE_MS;
+  if (state.pendingControl !== null) return COMMAND_DEADLINE_MS;
+  return null;
+}
+
 function reduceProducerState(state: ProducerState, action: ProducerAction): ProducerState {
   if (action.type === 'begin') {
     return {
@@ -302,6 +325,7 @@ function reduceProducerState(state: ProducerState, action: ProducerAction): Prod
       metrics: emptyMetrics(action.settings.instrumentCount),
       error: null,
       stale: false,
+      slow: false,
       snapshotAt: null,
       lastSequence: 0,
       runAcknowledged: false,
@@ -348,7 +372,7 @@ function reduceProducerState(state: ProducerState, action: ProducerAction): Prod
         state.status === 'running' &&
         state.pendingControl === 'pause'
       ) {
-        return { ...state, status: 'paused', pendingControl: null };
+        return { ...state, status: 'paused', slow: false, pendingControl: null };
       }
       return failedState(state, 'protocol');
     case 'snapshot':
@@ -381,6 +405,10 @@ function reduceProducerState(state: ProducerState, action: ProducerAction): Prod
       }
     case 'run-error':
       return failedState(state, event.code);
+    case 'pace-changed':
+      return state.runAcknowledged && state.status === 'running'
+        ? { ...state, slow: event.slow }
+        : failedState(state, 'protocol');
   }
 }
 
@@ -394,6 +422,7 @@ function failedState(state: ProducerState, code: ProducerErrorCode): ProducerSta
     metrics: hide ? emptyMetrics(state.pendingSettings.instrumentCount) : state.metrics,
     snapshotAt: hide ? null : state.snapshotAt,
     stale: !hide && state.snapshotAt !== null,
+    slow: false,
     pendingControl: null,
   };
 }

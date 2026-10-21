@@ -30,82 +30,89 @@ function emptyState(): InstrumentState {
   };
 }
 
-export class MetricAccumulator {
-  private states: readonly InstrumentState[];
+export interface MetricState {
+  readonly instrumentCount: number;
+  readonly instruments: readonly InstrumentState[];
+}
 
-  constructor(readonly instrumentCount: number) {
-    if (!Number.isInteger(instrumentCount) || instrumentCount < 1 || instrumentCount > 50) {
-      throw new RangeError('Instrument count must be an integer from 1 to 50');
+export function createMetricState(instrumentCount: number): MetricState {
+  if (!Number.isInteger(instrumentCount) || instrumentCount < 1 || instrumentCount > 50) {
+    throw new RangeError('Instrument count must be an integer from 1 to 50');
+  }
+  return { instrumentCount, instruments: Array.from({ length: instrumentCount }, emptyState) };
+}
+
+export function accumulateMetricBatch(
+  state: MetricState,
+  updates: readonly MarketUpdate[],
+): MetricState {
+  if (!Array.isArray(updates)) throw new ProducerFault('invalid-update');
+
+  const instruments = [...state.instruments];
+  try {
+    for (const update of updates) {
+      assertValidUpdate(update, state.instrumentCount);
+      const current = instruments[update.instrumentIndex];
+      instruments[update.instrumentIndex] = {
+        lastPriceCents: update.priceCents,
+        bidCents: update.bidCents,
+        askCents: update.askCents,
+        bidQuantity: update.bidQuantity,
+        askQuantity: update.askQuantity,
+        volume: current.volume + update.tradeQuantity,
+        notionalCents: current.notionalCents.plus(
+          update.priceCents.times(update.tradeQuantity.toString()),
+        ),
+      };
     }
-    this.states = Array.from({ length: instrumentCount }, emptyState);
+  } catch (error: unknown) {
+    if (error instanceof ProducerFault) throw error;
+    throw new ProducerFault('metric-failure', error);
   }
 
-  applyBatch(updates: readonly MarketUpdate[]): void {
-    if (!Array.isArray(updates)) throw new ProducerFault('invalid-update');
+  return { ...state, instruments };
+}
 
-    const next = [...this.states];
-    try {
-      for (const update of updates) {
-        assertValidUpdate(update, this.instrumentCount);
-        const current = next[update.instrumentIndex];
-        next[update.instrumentIndex] = {
-          lastPriceCents: update.priceCents,
-          bidCents: update.bidCents,
-          askCents: update.askCents,
-          bidQuantity: update.bidQuantity,
-          askQuantity: update.askQuantity,
-          volume: current.volume + update.tradeQuantity,
-          notionalCents: current.notionalCents.plus(
-            update.priceCents.times(update.tradeQuantity.toString()),
-          ),
-        };
-      }
-    } catch (error: unknown) {
-      if (error instanceof ProducerFault) throw error;
-      throw new ProducerFault('metric-failure', error);
-    }
-
-    this.states = next;
+export function metricSnapshot(state: MetricState): readonly InstrumentMetricSnapshot[] {
+  try {
+    return state.instruments.map((instrument, index) => {
+      const bookQuantity = instrument.bidQuantity + instrument.askQuantity;
+      return {
+        instrument: instrumentSymbol(index),
+        lastPriceCents: instrument.lastPriceCents,
+        spreadCents:
+          instrument.bidCents === null || instrument.askCents === null
+            ? null
+            : instrument.askCents.minus(instrument.bidCents),
+        volume: instrument.volume,
+        vwapCents:
+          instrument.volume === 0n
+            ? null
+            : instrument.notionalCents.dividedBy(instrument.volume.toString()),
+        imbalance:
+          bookQuantity === 0n
+            ? null
+            : financialDecimal(instrument.bidQuantity.toString())
+                .minus(instrument.askQuantity.toString())
+                .dividedBy(bookQuantity.toString()),
+      };
+    });
+  } catch (error: unknown) {
+    throw new ProducerFault('metric-failure', error);
   }
+}
 
-  snapshot(): readonly InstrumentMetricSnapshot[] {
-    try {
-      return this.states.map((state, index) => {
-        const bookQuantity = state.bidQuantity + state.askQuantity;
-        return {
-          instrument: instrumentSymbol(index),
-          lastPriceCents: state.lastPriceCents,
-          spreadCents:
-            state.bidCents === null || state.askCents === null
-              ? null
-              : state.askCents.minus(state.bidCents),
-          volume: state.volume,
-          vwapCents:
-            state.volume === 0n ? null : state.notionalCents.dividedBy(state.volume.toString()),
-          imbalance:
-            bookQuantity === 0n
-              ? null
-              : financialDecimal(state.bidQuantity.toString())
-                  .minus(state.askQuantity.toString())
-                  .dividedBy(bookQuantity.toString()),
-        };
-      });
-    } catch (error: unknown) {
-      throw new ProducerFault('metric-failure', error);
-    }
-  }
-
-  serializedSnapshot(): readonly SerializedInstrumentMetricSnapshot[] {
-    return this.snapshot().map((metric) => ({
-      instrument: metric.instrument,
-      lastPriceCents:
-        metric.lastPriceCents === null ? null : toDecimalString(metric.lastPriceCents),
-      spreadCents: metric.spreadCents === null ? null : toDecimalString(metric.spreadCents),
-      volume: metric.volume,
-      vwapCents: metric.vwapCents === null ? null : toDecimalString(metric.vwapCents),
-      imbalance: metric.imbalance === null ? null : toDecimalString(metric.imbalance),
-    }));
-  }
+export function serializedMetricSnapshot(
+  state: MetricState,
+): readonly SerializedInstrumentMetricSnapshot[] {
+  return metricSnapshot(state).map((metric) => ({
+    instrument: metric.instrument,
+    lastPriceCents: metric.lastPriceCents === null ? null : toDecimalString(metric.lastPriceCents),
+    spreadCents: metric.spreadCents === null ? null : toDecimalString(metric.spreadCents),
+    volume: metric.volume,
+    vwapCents: metric.vwapCents === null ? null : toDecimalString(metric.vwapCents),
+    imbalance: metric.imbalance === null ? null : toDecimalString(metric.imbalance),
+  }));
 }
 
 function assertValidUpdate(value: unknown, instrumentCount: number): asserts value is MarketUpdate {
@@ -131,6 +138,9 @@ function assertValidUpdate(value: unknown, instrumentCount: number): asserts val
     typeof update.askQuantity !== 'bigint' ||
     update.askQuantity < 0n
   ) {
-    throw new ProducerFault('invalid-update');
+    throw new ProducerFault('invalid-update', {
+      expected: `a valid update for one of ${instrumentCount} instruments`,
+      observed: value,
+    });
   }
 }

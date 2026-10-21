@@ -3,8 +3,8 @@
 | Field           | Value                                                                                              |
 | --------------- | -------------------------------------------------------------------------------------------------- |
 | Scope           | Implementation against [TASK.md](../TASK.md) and the [implementation plan](IMPLEMENTATION_PLAN.md) |
-| Reviewed        | 2026-10-21                                                                                         |
-| Source baseline | Current local review, including form, protocol, reducer, and feature-boundary revisions            |
+| Reviewed        | 2026-10-22                                                                                         |
+| Source baseline | `e9949b5`, including the audit fixes and architectural lint                                        |
 | Verification    | [Local verification](VERIFICATION.md)                                                              |
 
 ## Requirement and boundary review
@@ -68,7 +68,7 @@ loop because it validates every generated trade at up to 20,000 updates per seco
 
 | Finding                                            | Change and verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Apply gave no completion feedback                  | The form now shows a pending label and disables repeated submission. Once the worker acknowledges a running run, a nearby `role="status"` message confirms both the live run and whether browser storage succeeded. A failed run keeps its draft and shows an actionable `role="alert"`. Success feedback is tied to its run and disappears if that run later fails or the draft changes. Component tests and a real-browser Apply confirm the states.                                                                                                                                     |
+| Apply gave no completion feedback                  | The form now shows a pending label and disables repeated submission. Once the worker acknowledges a running run, a nearby `role="status"` message confirms both the live run and whether browser storage succeeded. A failed run keeps its draft and shows an actionable `role="alert"`. Success feedback is tied to its run; if the draft changes while the run starts, the confirmation remains visible and explicitly says the current edits were not applied. It disappears if that run later fails. Component tests and a real-browser Apply confirm the states.                      |
 | Reload discarded accepted settings                 | The producer now reads and validates a versioned `localStorage` value before initial startup and saves accepted values on Apply. Missing, malformed, or inaccessible storage falls back to defaults without crashing. Reload starts a fresh run with saved settings; volume, snapshot, and Pause state are not persisted. Storage, facade, and browser-reload checks cover this.                                                                                                                                                                                                           |
 | Repeated field checks and hand-written comparisons | One constraints object defines the setting names, limits, and defaults. The draft form registers validators from those names, and draft/worker setting comparisons iterate the same keys. Typed construction of defaults and drafts still lists the three fields so adding a field produces a compile error where a complete value is required.                                                                                                                                                                                                                                            |
 | Flat producer directory                            | `generation/` owns the worker protocol, controller, and Wasm adapter; `metrics/` owns market accumulation. Exact Decimal construction lives in `core/money` because both worker processing and Angular state reconstruction use it. The facade, public contracts, settings policy, and error policy stay at the feature root.                                                                                                                                                                                                                                                              |
@@ -104,13 +104,26 @@ measured render cost rises. This decision does not claim every device will meet 
 
 ## Remaining limits and delivery gate
 
-The production initial bundle is about 502 kB raw and 117 kB estimated transfer size after adding
-exhaustive event matching. The initial warning budget is 510 kB; the 1 MB error budget is unchanged.
+The production initial bundle is 505.85 kB raw and 118.47 kB estimated transfer size at `e9949b5`.
+The initial warning budget is 510 kB; the 1 MB error budget is unchanged.
 The maximum-rate browser and worker measurements passed on the tested machine, but a different device
 or future UI dependency growth may need another profile. Browser behavior has manual acceptance
 evidence; an automated end-to-end suite is outside the assignment's required tests.
 
-Phase 9 remains open: the private repository has no connected Cloudflare Pages project or live demo.
+The final audit bounded decimal payloads before parsing, reduced one Decimal allocation per Wasm
+update by reusing the validated quote object, and split command routing from active-run state. A
+later batch-local accumulator change creates at most one draft state per touched instrument in a
+batch and publishes it only after all updates succeed. Two five-minute runs accounted for every
+update, but their 0.8% throughput difference is too small to establish a speedup. The producer's
+command stream still owns cancellation and typed failure delivery. The route test proves
+producer state survives route teardown; all defined error codes now have exact policy assertions.
+ESLint checks TypeScript, AssemblyScript, and templates, source size and complexity, core-to-feature direction,
+cross-feature access to worker internals, and UI imports in worker-side code. It runs in both the
+locked quality command and the staged-file hook. The latest local verification is recorded in
+[Local verification](VERIFICATION.md).
+
+Phase 9 remains open and deployment is deferred by the maintainer: the private repository has no
+connected Cloudflare Pages project or live demo.
 The local Pages emulator proves the packaged routes and Wasm MIME rule, but only a remote deployment
 and a later push can prove automatic push-to-live behavior and interviewer access. GitHub Actions is
 manual-only during implementation; the intended Pages deployment must still build on every push to

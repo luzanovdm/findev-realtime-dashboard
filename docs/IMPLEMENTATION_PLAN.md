@@ -2,10 +2,10 @@
 
 | Field               | Value                                                                 |
 | ------------------- | --------------------------------------------------------------------- |
-| Status              | Runtime and local acceptance complete; remote deployment pending      |
+| Status              | Runtime and local acceptance complete; remote deployment deferred     |
 | Owner               | Repository maintainer                                                 |
 | Version             | 1.0                                                                   |
-| Last reviewed       | 2026-10-21                                                            |
+| Last reviewed       | 2026-10-22                                                            |
 | Requirement source  | [TASK.md](../TASK.md)                                                 |
 | Architecture source | [ARCHITECTURE.md](ARCHITECTURE.md)                                    |
 | Wasm decision       | [ADR-0001](decisions/0001-use-assemblyscript-for-market-generator.md) |
@@ -21,7 +21,7 @@ acceptance gate passes; creating the files alone is not completion.
 | 3–5: worker, metrics, facade       | Complete locally | Virtual-scheduler, pure-metric, facade, and built-worker tests                      |
 | 6–7: settings and dashboard        | Complete locally | Component tests and browser acceptance, including native 200% zoom                  |
 | 8: integration and performance     | Complete locally | [Verification record](VERIFICATION.md), including the five-minute maximum-rate soak |
-| 9: automatic deployment            | Open             | Cloudflare Git connection, live demo, and push-to-live proof are pending            |
+| 9: automatic deployment            | Deferred         | Cloudflare Git connection, live demo, and push-to-live proof are pending            |
 
 The pure accumulator from Phase 4 is implemented before the Phase 3 worker controller because the
 controller needs an atomic batch consumer. Phase 4's worker integration and snapshot-rate gate remain

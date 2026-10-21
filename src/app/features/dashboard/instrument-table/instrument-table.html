@@ -19,7 +19,7 @@
           <th scope="row">{{ metric.instrument }}</th>
           <td>{{ metric.lastPriceCents | usdCents }}</td>
           <td>{{ metric.spreadCents | usdCents }}</td>
-          <td>{{ metric.volume | volume }}</td>
+          <td>{{ metric.volume | count }}</td>
           <td>{{ metric.vwapCents | usdCents }}</td>
           <td>{{ metric.imbalance | imbalance }}</td>
         </tr>

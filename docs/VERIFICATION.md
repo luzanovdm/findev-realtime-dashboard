@@ -65,6 +65,10 @@ preservation, validation, Apply feedback, and cancellation of a pending run outc
 destroyed. Dashboard component tests cover status, Pause/Resume, and retained values. This verification
 does not replace the earlier browser and soak observations.
 
+The English Intl formatting revision passed the same locked command: 156 Angular/Vitest tests,
+eight compiled-Wasm and production-worker tests, and the production build. Tests include exact
+formatting above `Number.MAX_SAFE_INTEGER` for both Decimal currency values and `bigint` counts.
+
 The browser observations are local acceptance evidence, not a claim about every device or deployed
 host. The GitHub repository remains private. Cloudflare Pages has no GitHub connection or Pages
 project for this repository yet. Remote route refreshes, Wasm response headers, a public demo, and

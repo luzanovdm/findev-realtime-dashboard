@@ -73,10 +73,12 @@ src/app/
   core/
     money/
       financial-decimal.ts     exact Decimal construction and worker serialization
-      format-usd-cents.ts      USD display formatting without changing stored precision
+      format-usd-cents.ts      en-US Intl USD display without changing stored precision
       usd-cents.pipe.ts        reusable Angular currency presentation
     numbers/
-      group-digits.ts          digit grouping for money and bigint volume
+      format-count.ts          en-US Intl bigint count presentation
+      count.pipe.ts            reusable Angular count presentation
+      intl-string-format.d.ts  exact decimal-string Intl overload missing from TypeScript
     validation/
       is-record.ts             runtime object guard at untyped boundaries
   features/
@@ -101,8 +103,7 @@ src/app/
         instrument-table.ts
         instrument-table.html
         instrument-table.css
-        market-metric-formatters.ts
-        volume.pipe.ts
+        format-imbalance.ts
         imbalance.pipe.ts
     settings/                  edit and apply a new producer run
       settings.ts
@@ -116,7 +117,10 @@ assembly/
 calculation; `instrument-table` owns the table component, its styling, and metric presentation.
 They are product sub-capabilities. Public contracts and the facade remain at the market-producer
 feature root. `core/money` owns the exact Decimal policy and reusable USD presentation, while
-`core/numbers` and `core/validation` contain small policies used across runtime boundaries.
+`core/numbers` owns reusable count formatting. The market-specific imbalance formatter stays in
+`instrument-table`. All three presentation functions use `Intl.NumberFormat` with explicit `en-US`
+formatters. Decimal values remain exact strings at the Intl boundary and are never converted to
+binary floating point for display. `core/validation` contains runtime rules used across boundaries.
 
 Dependency rules:
 

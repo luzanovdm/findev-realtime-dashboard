@@ -1,6 +1,6 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import type Decimal from 'decimal.js';
-import { formatImbalance } from './market-metric-formatters';
+import { formatImbalance } from './format-imbalance';
 
 @Pipe({
   name: 'imbalance',

@@ -274,7 +274,8 @@ asynchronous behavior.
 
 ### Work
 
-1. Build the form with Angular Signal Forms and native numeric inputs.
+1. Build the form with Angular Signal Forms and native text inputs using numeric input mode. Keep
+   raw draft text so empty, fractional, and non-finite input remains visible for validation.
 2. Initialize all three draft fields from active settings.
 3. Apply required, integer, and inclusive range validation from the canonical settings rules.
 4. Show field-level errors after interaction and a concise form-level Apply failure if needed.

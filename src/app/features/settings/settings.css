@@ -1,0 +1,60 @@
+.settings-form {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 36rem;
+  padding: 1.5rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: var(--tui-radius-l);
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field label {
+  font-weight: 700;
+}
+
+.field-help,
+.form-note {
+  margin: 0;
+  color: var(--tui-text-secondary);
+  font: var(--tui-typography-body-s);
+}
+
+.field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: var(--tui-radius-m);
+  background: var(--tui-background-base);
+  color: var(--tui-text-primary);
+  font: inherit;
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--tui-background-accent-1);
+  outline-offset: 2px;
+}
+
+.field-error,
+.form-error {
+  margin: 0;
+  color: var(--tui-text-negative);
+  font: var(--tui-typography-body-s);
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+@media (max-width: 40rem) {
+  .settings-form {
+    padding: 1rem;
+  }
+}

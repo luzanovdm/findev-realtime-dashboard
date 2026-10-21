@@ -86,7 +86,9 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
   contracts, and runtime code; the app shell contains only application composition and routing.
 - Taiga UI with `provideTaiga`, `tui-root`, the standard theme, local Manrope fonts, local SVG
   icons, navigation buttons, and badges. The UI has no CDN dependencies.
-- Dashboard and settings pages still need their forms, table, and controls.
+- Settings uses a validated Signal Forms draft. Edits stay local; Apply starts a new run and resets
+  the form after worker acknowledgement.
+- The dashboard still needs its instrument table, metric formatting, and Pause/Resume control.
 - Dashboard metrics, producer settings, and market updates are defined beside the feature that owns
   their behavior.
 - `MetricAccumulator` calculates exact Decimal prices and VWAP, bigint cumulative volume, spread,
@@ -122,7 +124,6 @@ the unit suite identify missing business-requirement coverage and do not count a
 
 ## Remaining implementation
 
-- Build the form with integer and range validation, setting application, and new-run behavior.
 - Add the instrument table, currency and imbalance formatting, Pause/Resume controls, and responsive
   behavior under higher update rates.
 - Complete browser acceptance, performance and failure-path checks, and automatic deployment.

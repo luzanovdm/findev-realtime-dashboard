@@ -1,0 +1,72 @@
+<h1>Settings</h1>
+<p class="page-description">Configure the market data producer.</p>
+
+<form class="settings-form" (submit)="onSubmit($event)" novalidate>
+  <div class="field">
+    <label for="instrument-count">Instrument count</label>
+    <p id="instrument-count-help" class="field-help">1–50 instruments</p>
+    <input
+      id="instrument-count"
+      type="text"
+      inputmode="numeric"
+      autocomplete="off"
+      [formField]="settingsForm.instrumentCount"
+      aria-describedby="instrument-count-help instrument-count-error"
+    />
+    @if (
+      settingsForm.instrumentCount().touched() && settingsForm.instrumentCount().errors().length
+    ) {
+      <p id="instrument-count-error" class="field-error">
+        {{ settingsForm.instrumentCount().errors()[0].message }}
+      </p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="updates-per-batch">Updates per batch</label>
+    <p id="updates-per-batch-help" class="field-help">1–1,000 updates across all instruments</p>
+    <input
+      id="updates-per-batch"
+      type="text"
+      inputmode="numeric"
+      autocomplete="off"
+      [formField]="settingsForm.updatesPerBatch"
+      aria-describedby="updates-per-batch-help updates-per-batch-error"
+    />
+    @if (
+      settingsForm.updatesPerBatch().touched() && settingsForm.updatesPerBatch().errors().length
+    ) {
+      <p id="updates-per-batch-error" class="field-error">
+        {{ settingsForm.updatesPerBatch().errors()[0].message }}
+      </p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="batch-interval">Batch interval</label>
+    <p id="batch-interval-help" class="field-help">50–2,000 milliseconds between batches</p>
+    <input
+      id="batch-interval"
+      type="text"
+      inputmode="numeric"
+      autocomplete="off"
+      [formField]="settingsForm.batchIntervalMs"
+      aria-describedby="batch-interval-help batch-interval-error"
+    />
+    @if (
+      settingsForm.batchIntervalMs().touched() && settingsForm.batchIntervalMs().errors().length
+    ) {
+      <p id="batch-interval-error" class="field-error">
+        {{ settingsForm.batchIntervalMs().errors()[0].message }}
+      </p>
+    }
+  </div>
+
+  <div class="form-actions">
+    <button tuiButton type="submit" [disabled]="applyUnavailable()">Apply settings</button>
+    <p class="form-note">Applying starts a new run and clears all current values and totals.</p>
+  </div>
+  @if (formError(); as message) {
+    <p class="form-error" role="alert">{{ message }}</p>
+  }
+</form>

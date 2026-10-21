@@ -42,6 +42,8 @@ export interface RunStartedEvent {
 export interface SnapshotEvent {
   readonly type: 'snapshot';
   readonly runId: number;
+  readonly sequence: number;
+  readonly timestampMs: number;
   readonly metrics: readonly SerializedInstrumentMetricSnapshot[];
 }
 
@@ -87,7 +89,13 @@ export function isProducerWorkerEvent(value: unknown): value is ProducerWorkerEv
     case 'run-started':
       return isProducerSettings(value['activeSettings']);
     case 'snapshot':
-      return isMetricList(value['metrics']);
+      return (
+        isRunId(value['sequence']) &&
+        typeof value['timestampMs'] === 'number' &&
+        Number.isSafeInteger(value['timestampMs']) &&
+        value['timestampMs'] >= 0 &&
+        isMetricList(value['metrics'])
+      );
     case 'status-changed':
       return isProducerStatus(value['status']);
     case 'run-error':

@@ -1,14 +1,25 @@
 /// <reference lib="webworker" />
 import { loadScaffoldWasm } from './wasm-scaffold';
 import { producerErrorCode } from './producer-error';
-import type { SmokeResponse } from './worker.protocol';
+import { ProducerController } from './producer-controller';
+import { loadMarketGenerator } from './wasm-generator';
+import type { ProducerWorkerEvent, SmokeResponse } from './worker.protocol';
+
+const controller = new ProducerController({
+  load: loadMarketGenerator,
+  emit: send,
+  schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+  cancel: (handle) => clearTimeout(handle),
+  now: () => performance.now(),
+  timestampMs: () => Date.now(),
+});
 
 addEventListener('message', ({ data }: MessageEvent<unknown>) => {
-  if (typeof data !== 'object' || data === null || !('type' in data) || data.type !== 'smoke') {
-    return;
+  if (typeof data === 'object' && data !== null && 'type' in data && data.type === 'smoke') {
+    void handleSmoke(data);
+  } else {
+    controller.dispatch(data);
   }
-
-  void handleSmoke(data);
 });
 
 async function handleSmoke(data: object): Promise<void> {
@@ -30,12 +41,10 @@ async function handleSmoke(data: object): Promise<void> {
   }
 }
 
-function send(response: SmokeResponse): void {
+function send(response: SmokeResponse | ProducerWorkerEvent): void {
   try {
     postMessage(response);
   } catch {
-    // The main thread's deadline handles a broken message channel.
+    if ('runId' in response) controller.dispatch({ type: 'dispose', runId: response.runId });
   }
 }
-
-// TODO: implement actual Wasm producer calls, scheduling and resource lifecycle.

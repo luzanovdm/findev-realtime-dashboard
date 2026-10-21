@@ -19,6 +19,14 @@ describe('producer worker protocol', () => {
     imbalance: '0.2',
   } as const;
 
+  const validSnapshot = {
+    type: 'snapshot',
+    runId: 1,
+    sequence: 1,
+    timestampMs: 100,
+    metrics: [validMetric],
+  } as const;
+
   it('accepts every valid command type', () => {
     expect(isProducerWorkerCommand(validStart)).toBe(true);
     expect(isProducerWorkerCommand({ type: 'pause', runId: 1 })).toBe(true);
@@ -45,9 +53,7 @@ describe('producer worker protocol', () => {
         activeSettings: DEFAULT_PRODUCER_SETTINGS,
       }),
     ).toBe(true);
-    expect(isProducerWorkerEvent({ type: 'snapshot', runId: 1, metrics: [validMetric] })).toBe(
-      true,
-    );
+    expect(isProducerWorkerEvent(validSnapshot)).toBe(true);
     expect(isProducerWorkerEvent({ type: 'status-changed', runId: 1, status: 'paused' })).toBe(
       true,
     );
@@ -61,23 +67,25 @@ describe('producer worker protocol', () => {
   });
 
   it.each([
-    { type: 'snapshot', runId: 1, metrics: [{ ...validMetric, volume: -1n }] },
-    { type: 'snapshot', runId: 1, metrics: [{ ...validMetric, imbalance: '1.1' }] },
-    { type: 'snapshot', runId: 1, metrics: [{ ...validMetric, spreadCents: '-1' }] },
-    { type: 'snapshot', runId: 1, metrics: [{ ...validMetric, spreadCents: '0' }] },
-    { type: 'snapshot', runId: 1, metrics: [{ ...validMetric, vwapCents: '1e3' }] },
-    { type: 'snapshot', runId: 1, metrics: [{ ...validMetric, instrument: 'ASSET-51' }] },
-    { type: 'snapshot', runId: 1, metrics: [validMetric, validMetric] },
+    { ...validSnapshot, sequence: 0 },
+    { ...validSnapshot, timestampMs: -1 },
+    { ...validSnapshot, metrics: [{ ...validMetric, volume: -1n }] },
+    { ...validSnapshot, metrics: [{ ...validMetric, imbalance: '1.1' }] },
+    { ...validSnapshot, metrics: [{ ...validMetric, spreadCents: '-1' }] },
+    { ...validSnapshot, metrics: [{ ...validMetric, spreadCents: '0' }] },
+    { ...validSnapshot, metrics: [{ ...validMetric, vwapCents: '1e3' }] },
+    { ...validSnapshot, metrics: [{ ...validMetric, instrument: 'ASSET-51' }] },
+    { ...validSnapshot, metrics: [validMetric, validMetric] },
     { type: 'status-changed', runId: 1, status: 'stopped' },
     { type: 'run-error', runId: 1, code: 'unknown' },
     { type: 'run-error', runId: 1, error: { code: 'generation', message: '' } },
-    { type: 'snapshot', runId: 0, metrics: [] },
+    { ...validSnapshot, runId: 0 },
   ])('rejects an invalid event: %o', (event) => {
     expect(isProducerWorkerEvent(event)).toBe(false);
   });
 
   it('preserves bigint metrics through structured cloning', () => {
-    const event = structuredClone({ type: 'snapshot', runId: 1, metrics: [validMetric] });
+    const event = structuredClone(validSnapshot);
 
     expect(event.metrics[0]?.volume).toBe(40n);
     expect(isProducerWorkerEvent(event)).toBe(true);

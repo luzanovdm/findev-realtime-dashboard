@@ -94,8 +94,9 @@ documentation-only changes. Dependabot checks npm and GitHub Actions updates wee
 - `assembly/index.ts` contains the stateful market-update generator. Its randomness, price walk,
   instrument selection, trades, and order-book quantities run in Wasm; compiled-module tests cover
   the ABI, batch sizes, invariants, deterministic seeds, state continuity, and memory stability.
-- `features/market-producer/producer.worker.ts` still uses a temporary `smoke` export for its
-  connection diagnostic. Connecting the generator to the worker is the next implementation phase.
+- `features/market-producer/producer.worker.ts` now runs the generator and Decimal metric accumulator
+  through an application-run protocol. It also keeps the temporary `smoke` path until the Angular
+  producer facade replaces the diagnostic connection.
 - `features/market-producer/scaffold-connection.ts` runs one short Angular → Worker → Wasm
   diagnostic when the app shell is created, surfaces a safe failure message, and terminates the
   worker. It does not start a producer or implement pause, resume, or reset state.
@@ -118,6 +119,8 @@ Angular production build in `node:worker_threads`. A small test adapter maps `po
 then closes the server and worker.
 
 `tests/wasm-abi.test.mjs` and `tests/wasm-generator.test.mjs` execute the compiled module directly.
+`tests/producer-worker.test.mjs` runs the production worker bundle with the compiled Wasm asset,
+including a maximum-size batch, Pause/Resume, reset, and missing-asset failure.
 
 These tests prove compilation and transport in Node. They do not replace browser rendering or the
 assignment's acceptance tests. Browser and end-to-end checks are not automated. `it.todo` cases in

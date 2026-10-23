@@ -24,7 +24,7 @@ Open **http://127.0.0.1:4200/**. If that port is occupied, leave the existing pr
 | Command                              | Purpose                                                                             |
 | ------------------------------------ | ----------------------------------------------------------------------------------- |
 | `npm run check`                      | Formatting, lint, strict types, unit tests, production build, Wasm/worker tests     |
-| `npm test`                           | 192 Angular/Vitest tests plus eight compiled-Wasm/worker tests and production build |
+| `npm test`                           | 198 Angular/Vitest tests plus eight compiled-Wasm/worker tests and production build |
 | `npm run test:unit`                  | Angular/Vitest tests only; `test:watch` enables watch mode                          |
 | `npm run build`                      | Compile Wasm, then build production Angular assets                                  |
 | `npm run build:wasm`                 | Compile `assembly/index.ts` to `public/wasm/market-generator.wasm`                  |
@@ -110,7 +110,10 @@ on every push, including documentation changes. GitHub CI's documentation filter
 `public/_headers` supplies `application/wasm`. Pages' SPA fallback must serve direct `/dashboard` and
 `/settings` requests.
 
-Builds generate `/build-info.json` with the source commit SHA (`CF_PAGES_COMMIT_SHA` on Pages,
+The header displays the short source SHA and UTC build time (not release time), loaded without
+blocking application startup. Metadata failures show a small unavailable label.
+
+Builds generate `/build-info.json` with the source commit SHA and an ISO UTC build timestamp (`CF_PAGES_COMMIT_SHA` on Pages,
 `GITHUB_SHA` on Actions, local Git HEAD otherwise). This generated file is ignored by Git and served
 with `Cache-Control: no-store`. Compare it with the deployment's source commit to verify which
 revision is live after a merge. It does not change application behavior.

@@ -1,7 +1,10 @@
 <tui-root>
   <div class="shell">
     <header class="header">
-      <a class="brand" routerLink="/dashboard">Findev <span>Realtime dashboard</span></a>
+      <div>
+        <a class="brand" routerLink="/dashboard">Findev <span>Realtime dashboard</span></a>
+        <app-build-version />
+      </div>
       <div class="header-controls">
         <span tuiBadge appearance="neutral">{{ producer.status() }}</span>
 

@@ -73,6 +73,7 @@ describe('Application routing', () => {
 describe('Application shell', () => {
   beforeEach(() => {
     // jsdom has no viewport media queries; this is not a browser rendering test.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
     vi.stubGlobal('matchMedia', (media: string) => ({
       media,
       matches: false,

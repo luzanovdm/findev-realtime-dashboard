@@ -17,5 +17,5 @@ function commitSha() {
 
 writeFileSync(
   new URL('../public/build-info.json', import.meta.url),
-  `${JSON.stringify({ commit: commitSha() }, null, 2)}\n`,
+  `${JSON.stringify({ commit: commitSha(), builtAt: new Date().toISOString() }, null, 2)}\n`,
 );

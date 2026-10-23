@@ -4,3 +4,13 @@
 
 /build-info.json
   Cache-Control: no-store
+
+# Only Angular fingerprinted bundles are immutable. HTML and unversioned Wasm revalidate.
+/main-*.js
+  Cache-Control: public, max-age=31536000, immutable
+/chunk-*.js
+  Cache-Control: public, max-age=31536000, immutable
+/worker-*.js
+  Cache-Control: public, max-age=31536000, immutable
+/styles-*.css
+  Cache-Control: public, max-age=31536000, immutable

@@ -23,8 +23,9 @@ time. If data integrity is uncertain, hide affected metrics.
 
 Within the running application, errors must lead to a visible state and a usable navigation and
 recovery control. The browser process, a killed tab, or a completely failed JavaScript bootstrap is
-outside what application code can guarantee. An HTML fallback and global diagnostics can explain a
-bootstrap failure where the browser still renders the document.
+outside what application code can guarantee. The initial HTML shows a loading status, not an error. A rejected Angular bootstrap replaces it
+with a reload message; noscript explains disabled JavaScript. A completely failed module download
+can still leave the loading status visible. Global diagnostics report errors after JavaScript starts.
 
 ## 2. Severity and presentation
 

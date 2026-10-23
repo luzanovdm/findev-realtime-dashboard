@@ -4,13 +4,23 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { TuiButton, TuiRoot } from '@taiga-ui/core';
 import { TuiBadge } from '@taiga-ui/kit';
 import { AppErrorHandler } from './app-error';
+import { BuildVersion } from './core/build-version/build-version';
 import { AppearanceService } from './core/appearance/appearance.service';
 import { MarketProducerFacade } from './features/market-producer/market-producer.facade';
 import { ProducerRecoveryAction } from './features/market-producer/market-producer.types';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, TuiRoot, TuiButton, TuiBadge, DatePipe],
+  imports: [
+    RouterLink,
+    RouterLinkActive,
+    RouterOutlet,
+    TuiRoot,
+    TuiButton,
+    TuiBadge,
+    DatePipe,
+    BuildVersion,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

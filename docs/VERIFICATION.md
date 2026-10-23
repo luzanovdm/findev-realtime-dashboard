@@ -77,3 +77,29 @@ remote Wasm response headers remain unverified. Cloudflare deployment and pushin
 deferred by the maintainer while code review continues. The local Pages emulator previously served
 both direct routes and the Wasm asset with `application/wasm`; that does not substitute for a remote
 deployment check.
+
+## Independent pre-submission check — October 23
+
+The source baseline was `462b8a94f59fc2504f0088a9f6b6e186baa96181`; the original working tree was
+clean. Checks ran against an isolated source copy using the existing locked dependencies.
+Formatting, ESLint, strict app/worker/spec types, and all 192 Angular/Vitest tests passed.
+Production build and all eight compiled-Wasm/worker tests passed with Node 24.21.0 outside the agent
+sandbox. Sandboxed production builds aborted in native LMDB; this did not require application changes.
+The initial production bundle was 505.85 kB raw (118.53 kB estimated transfer).
+
+The newly built app was checked in a separate local browser tab: live generation, Pause/Resume,
+paused-state preservation across both routes, rejection of fractional instrument count, maximum
+settings (50 instruments, 1,000 updates, 50 ms), and Apply from paused to a new two-instrument run.
+The new run displayed unavailable values and zero volume for the instrument without a first trade.
+The minimum configuration (1 instrument, 1 update, 50 ms), boundary rejection (0 instruments,
+1,001 updates, 49 ms), and saved settings after reload were also checked. There were no captured
+console warnings or errors on the normal path. Separate fresh local origins served a missing Wasm
+asset, HTML in place of Wasm, and invalid Wasm bytes: each displayed its expected initialization
+error and disabled Pause. Navigation remained available after failure; restoring the missing asset
+and choosing Start new run recovered generation. These are functional observations, not a new
+performance benchmark or remote-host verification.
+
+GitHub API confirmed that remote `main` matched the baseline SHA and the repository remained private.
+The local CI update enables push/PR quality checks with documentation-only exclusions. It does not
+connect Pages or publish a demo. Remote deployment and a later automatic push-to-live check remain
+submission blockers. The original plan and architectural decisions are retained.

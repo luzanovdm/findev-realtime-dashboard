@@ -28,3 +28,9 @@ h2 {
 .placeholder tui-icon {
   color: var(--tui-text-tertiary);
 }
+
+.startup {
+  max-width: 72rem;
+  margin: 3rem auto;
+  padding: 0 1.5rem;
+}

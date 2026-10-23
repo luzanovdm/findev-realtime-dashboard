@@ -3,8 +3,10 @@
 Angular dashboard with a stateful AssemblyScript WebAssembly market generator running in a Web
 Worker. The original assignment is in [TASK.md](TASK.md).
 
-**Status:** implementation and local checks complete; remote deployment and interviewer access are
-pending. [Repository](https://github.com/luzanovdm/findev-realtime-dashboard) is currently private.
+**Live demo:** https://findev-realtime-dashboard.pages.dev
+
+[Public repository](https://github.com/luzanovdm/findev-realtime-dashboard). Cloudflare Pages builds
+and publishes production from `main`; other branches receive preview deployments.
 
 ## Run and verify
 
@@ -82,17 +84,16 @@ memory. Production-worker tests cover startup, Pause/Resume, reset, missing/inva
 fallback responses. Browser checks are separate from Node tests; E2E tests are not required.
 
 Commits use Conventional Commits (`npm run commit` offers a prompt). Local hooks format/lint staged
-files, validate messages, and run the full check before push. The local CI configuration enables push and pull-request
-checks, excluding documentation-only changes, and retains manual dispatch. These triggers take
-effect on GitHub after the workflow change is pushed. Dependabot checks npm
-and Actions weekly. Local hooks do not replace CI.
+files, validate messages, and run the full check before push. GitHub Actions runs push and pull-request checks, excluding documentation-only changes, and retains
+manual dispatch. Dependabot checks npm and Actions weekly. Local hooks do not replace CI.
 
-## Automatic deployment — pending
+## Automatic deployment
 
-Cloudflare Pages is the selected host. A connected project and a live URL have **not** been verified;
-CI alone does not satisfy the assignment's automatic-deployment requirement.
+Cloudflare Pages is connected through Git integration with access to this repository only. The first
+production deployment passed the full check and published commit `1e7ee76` on 23 October 2026.
+Both routes, live generation, Pause/Resume, and the Wasm response were checked on the hosted build.
 
-Connect the existing repository through **Pages Git integration**:
+The project uses these settings:
 
 | Setting                       | Value                                    |
 | ----------------------------- | ---------------------------------------- |
@@ -109,15 +110,12 @@ on every push, including documentation changes. GitHub CI's documentation filter
 `public/_headers` supplies `application/wasm`. Pages' SPA fallback must serve direct `/dashboard` and
 `/settings` requests.
 
-Before submission:
+Builds generate `/build-info.json` with the source commit SHA (`CF_PAGES_COMMIT_SHA` on Pages,
+`GITHUB_SHA` on Actions, local Git HEAD otherwise). This generated file is ignored by Git and served
+with `Cache-Control: no-store`. Compare it with the deployment's source commit to verify which
+revision is live after a merge. It does not change application behavior.
 
-1. Verify the first remote build, both direct routes, and HTTP 200 + `application/wasm` for the asset.
-2. Check live generation, Pause/Resume, and Apply. Associate the deployment with its commit SHA.
-3. Observe a later push deploying automatically, without a manual deployment command.
-4. Make the repository accessible to interviewers, verify repository/demo access without the owner's
-   login, and add the confirmed demo URL here and to the submission email.
-
-No live-demo URL is claimed until those checks pass. Host configuration references:
+Host configuration references:
 [Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/),
 [build image](https://developers.cloudflare.com/pages/configuration/build-image/),
 [headers](https://developers.cloudflare.com/pages/configuration/headers/),

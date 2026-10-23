@@ -1,3 +1,6 @@
 /wasm/*.wasm
   Content-Type: application/wasm
   X-Content-Type-Options: nosniff
+
+/build-info.json
+  Cache-Control: no-store

@@ -7,7 +7,7 @@
     "prestart": "npm run build:wasm",
     "start": "ng serve --host 127.0.0.1 --open=false",
     "dev": "npm start",
-    "prebuild": "npm run build:wasm",
+    "prebuild": "npm run build:wasm && node scripts/write-build-info.mjs",
     "build": "ng build",
     "prewatch": "npm run build:wasm",
     "watch": "ng build --watch --configuration development",

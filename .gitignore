@@ -51,3 +51,6 @@ Thumbs.db
 
 # Cloudflare Pages local emulator artifacts
 /.wrangler/
+
+# Generated deployment provenance
+/public/build-info.json
